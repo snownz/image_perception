@@ -1,0 +1,72 @@
+# Python cache files
+__pycache__/
+*/__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Dataset folders
+dataset/
+dataset_detection/
+dataset_detection_pre/
+
+# Model folders
+models/
+yolo/
+
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Virtual environment
+venv/
+ENV/
+env/
+
+# Model checkpoints and logs
+models/*/checkpoint_*.pth
+*.tfevents.*
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific
+.DS_Store
