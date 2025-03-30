@@ -9,7 +9,6 @@ from losses import DINOLoss, iBOTPatchLoss, KoLeoLoss, VicRegLoss, HungarianLoss
 import math
 from functools import partial
 import numpy as np
-from collections import defaultdict
 
 def check_nan(tensor, name):
     if torch.isnan(tensor).any():
@@ -506,20 +505,6 @@ class ObjectDetectionModel(Module):
             features = self.backbone( images )
             features = [ x['x_norm_patch_tokens'] for x in features['patch_layers'] ]
 
-            # Prpoposal Objects
-            # proposal_regions = [
-            #     self.proposal( features[0] ).squeeze(-1),
-            #     self.proposal( features[1] ).squeeze(-1),
-            #     self.proposal( features[2] ).squeeze(-1),
-            # ]
-
-            # Masking the non-object regions
-            # features = [
-            #     proposal_regions[0][:,:,None].clamp( 0, 1 ) * features[0],
-            #     proposal_regions[1][:,:,None].clamp( 0, 1 ) * features[1],
-            #     proposal_regions[2][:,:,None].clamp( 0, 1 ) * features[2],
-            # ]
-
             # Forward Detection
             pred_boxes, pred_cls_logits = self.detection( features )
 
@@ -554,20 +539,6 @@ class ObjectDetectionModel(Module):
             loss_accumulator = 0.0
             loss_dict = {}
 
-            # Proposal Loss
-            # proposal_loss = 0.0
-            # for i in range( len( proposal_regions ) ):
-            #     ones_percentage = proposal_tagets[i].mean() + 1e-6
-            #     loss = F.binary_cross_entropy_with_logits( 
-            #         proposal_regions[i], 
-            #         proposal_tagets[i].flatten(1).float(), 
-            #         pos_weight = 1.0 / ones_percentage 
-            #     )
-            #     proposal_loss += loss.mean()
-            # proposal_loss = proposal_loss.mean()
-            # loss_accumulator += proposal_loss
-            # loss_dict['proposal_loss'] = proposal_loss.item()
-
             # l1 Loss
             l1_loss = normalized_l1_loss( selected_pred_boxes, selected_target_boxes ).mean()
             loss_accumulator += l1_loss
@@ -577,11 +548,6 @@ class ObjectDetectionModel(Module):
             giuo_loss = 1 - bbox_iou( selected_pred_boxes, selected_target_boxes, GIoU = True ).mean()
             loss_accumulator += giuo_loss
             loss_dict['giou_loss'] = giuo_loss.item()
-
-            # KL Loss
-            # kl_loss = 0.1 * compute_gaussian_kl_loss( selected_pred_boxes, selected_target_boxes, width, height ).mean()
-            # loss_accumulator += kl_loss
-            # loss_dict['kl_loss'] = kl_loss.item()
 
             # Classification Loss
             cls_loss = self.focal_loss( sorted_pred_cls_logits, sorted_target_labels )
