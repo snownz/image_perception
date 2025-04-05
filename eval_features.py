@@ -43,7 +43,6 @@ int_to_label = {
 
 # Generate colors for labels and detectors - set random seed for consistency
 random.seed(42)
-int_to_color = {i: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for i in range(24)}
 det_to_color = {i: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for i in range(300)}
 
 @dataclass
@@ -208,10 +207,16 @@ def extract_features_data():
                 'display_name': module_display_names.get(key, key)
             }
     
-    return features_data, hook_keys, attention_layer_keys
+    return features_data, hook_keys
 
 def draw_detections_on_image(image):
-    global detection_results, int_to_label, int_to_color
+    global detection_results, int_to_label
+
+    detection_results['labels'] = detection_results['labels'].cpu().numpy()
+    indices = occurrence_indices( detection_results['labels'] )
+    detection_results['labels'] = [ f"{int_to_label[l]}_{i}" for l, i in zip( detection_results['labels'], indices ) ]
+    labe_to_detector = { l:d for l, d in zip( detection_results['labels'], detection_results['detectors'] ) }
+    int_to_color = { l: det_to_color[labe_to_detector[l]] for l in detection_results['labels'] }
     
     if detection_results['boxes'] is None:
         return image
@@ -235,10 +240,10 @@ def draw_detections_on_image(image):
         y_max = int((y_center + height / 2) * image_height)
         
         # Get metadata for drawing
-        label_name = int_to_label[label.item()]
+        label_name = label
         score_percentage = score.item() * 100
         detector_number = detector.item()
-        box_color = int_to_color[label.item()]
+        box_color = int_to_color[label]
         
         # Draw rectangle
         cv2.rectangle(image_result, (x_min, y_min), (x_max, y_max), box_color, 2)
@@ -327,7 +332,7 @@ def get_proposals_heatmap_overlay(image):
     indices = detection_results['indices']
     detectors = detection_results['detectors']
     
-    legend = {d: int_to_label[l.item()] + '_' + str(i) for l, i, d in zip(labels, indices, detectors)}
+    legend = {d: l for l, i, d in zip(labels, indices, detectors)}
     
     # Define scales for multi-scale detection
     shapes = [(80, 80), (40, 40), (20, 20)]
@@ -393,7 +398,7 @@ def index():
 @app.route('/api/image')
 def get_image():
     image = process_image()
-    
+    process_attention_queries()
     # Draw detections on a copy of the image
     image_with_detections = draw_detections_on_image(image.copy())
     
@@ -405,33 +410,20 @@ def get_image():
     _, buffer_detections = cv2.imencode('.png', cv2.cvtColor(image_with_detections, cv2.COLOR_RGB2BGR))
     _, buffer_heatmap = cv2.imencode('.png', cv2.cvtColor(heatmap_overlay, cv2.COLOR_RGB2BGR))
     
-    # Prepare detection results for the frontend
-    detection_data = {}
-    if detection_results['boxes'] is not None:
-        detection_data = {
-            'boxes': detection_results['boxes'].tolist() if hasattr(detection_results['boxes'], 'tolist') else detection_results['boxes'],
-            'scores': [float(s.item()) for s in detection_results['scores']],
-            'labels': [int(l.item()) for l in detection_results['labels']],
-            'detectors': detection_results['detectors'].tolist() if hasattr(detection_results['detectors'], 'tolist') else detection_results['detectors'],
-            'indices': detection_results['indices']
-        }
-    
     return jsonify({
         'original': buffer_original.tobytes().hex(),
         'detections': buffer_detections.tobytes().hex(),
         'heatmap': buffer_heatmap.tobytes().hex(),
         'width': image.shape[1],
-        'height': image.shape[0],
-        'detection_results': detection_data
+        'height': image.shape[0]
     })
 
 @app.route('/api/features')
 def get_features():
-    features_data, hook_keys, attention_layer_keys = extract_features_data()
+    features_data, hook_keys = extract_features_data()
     return jsonify({
         'features_data': features_data,
-        'module_keys': hook_keys,
-        'attention_layer_keys': attention_layer_keys
+        'module_keys': hook_keys
     })
 
 @app.route('/api/channel/<module>/<int:channel_idx>')
@@ -473,84 +465,6 @@ def get_channel(module, channel_idx):
             'height': int(channel.shape[0]),
             'width': int(channel.shape[1])
         }
-    })
-
-@app.route('/api/label_mapping')
-def get_label_mapping():
-    global int_to_label, int_to_color, det_to_color
-    
-    # Convert int_to_color to a JSON serializable format (tuples are not serializable)
-    serializable_int_to_color = {str(k): list(v) for k, v in int_to_color.items()}
-    serializable_det_to_color = {str(k): list(v) for k, v in det_to_color.items()}
-    
-    return jsonify({
-        'int_to_label': int_to_label,
-        'int_to_color': serializable_int_to_color,
-        'det_to_color': serializable_det_to_color
-    })
-
-@app.route('/api/attention/<layer_key>/<int:query_idx>')
-def get_attention_weights(layer_key, query_idx):
-    global hook_outputs, detection_results
-    
-    if layer_key not in hook_outputs:
-        return jsonify({'error': f'Attention layer {layer_key} not found'})
-    
-    # Get attention weights
-    # The output is typically [batch_size, num_heads, query_seq_len, key_seq_len]
-    attention_output = hook_outputs[layer_key]['output']
-    
-    # For self-attention in transformer decoder, the attention matrix is [batch, num_heads, num_queries, num_queries]
-    # We take the first batch and average over heads
-    if isinstance(attention_output, tuple):
-        # Some attention modules return (attn_output, attn_weights)
-        attention_weights = attention_output[1].cpu().numpy()
-    else:
-        # Others might return just the attention tensor directly
-        attention_weights = attention_output.cpu().numpy()
-    
-    # Average over heads if there are multiple
-    if len(attention_weights.shape) > 3:
-        attention_weights = attention_weights.mean(axis=1)
-    
-    # Extract weights for the specified query
-    query_attention = attention_weights[0, query_idx].tolist()
-    
-    # Extract associated query information from detection_results
-    query_info = {}
-    
-    # Find the detection index for this query (might not be a direct match with the query index)
-    detection_index = -1
-    if detection_results['boxes'] is not None:
-        try:
-            detection_index = detection_results['detectors'].tolist().index(query_idx)
-        except ValueError:
-            # Not a detection query
-            pass
-    
-    if detection_index != -1:
-        bbox = detection_results['boxes'][detection_index].tolist()
-        score = float(detection_results['scores'][detection_index].item())
-        label = int(detection_results['labels'][detection_index].item())
-        detector = int(detection_results['detectors'][detection_index].item())
-        
-        query_info = {
-            'bbox': bbox,
-            'score': score,
-            'label': label,
-            'detector': detector,
-            'label_name': int_to_label.get(label, "Unknown"),
-            'is_detection': True
-        }
-    else:
-        query_info = {
-            'is_detection': False
-        }
-    
-    return jsonify({
-        'query_idx': query_idx,
-        'attention_weights': query_attention,
-        'query_info': query_info
     })
 
 if __name__ == '__main__':
