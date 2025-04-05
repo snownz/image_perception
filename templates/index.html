@@ -202,15 +202,48 @@
     
     <div class="container">
         <section class="section">
-            <div class="upload-container" style="margin-bottom: 20px; display: flex; align-items: center; gap: 15px;">
-                <label for="image-upload" class="upload-button" style="background: #4b6cb7; color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; display: inline-block; transition: all 0.3s;">
-                    <span style="margin-right: 5px;">📤</span> Upload Image
-                </label>
-                <input type="file" id="image-upload" accept="image/*" style="display: none;">
-                <div id="upload-status" style="font-size: 0.9rem;"></div>
-                <button id="process-button" style="background: #182848; color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; display: none; transition: all 0.3s;">
-                    <span style="margin-right: 5px;">🔄</span> Process Image
-                </button>
+            <div class="upload-container" style="margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
+                    <label for="image-upload" class="upload-button" style="background: #4b6cb7; color: white; padding: 12px 20px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; transition: all 0.3s; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <span style="margin-right: 8px; font-size: 1.1em;">📤</span> Upload Image
+                    </label>
+                    <input type="file" id="image-upload" accept="image/*" style="display: none;">
+                    
+                    <button id="camera-button" style="background: #4b6cb7; color: white; padding: 12px 20px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; transition: all 0.3s; font-weight: 500; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <span style="margin-right: 8px; font-size: 1.1em;">📷</span> Take Picture
+                    </button>
+                    
+                    <button id="process-button" style="background: #182848; color: white; padding: 12px 20px; border-radius: 6px; cursor: pointer; display: none; transition: all 0.3s; font-weight: 500; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <span style="margin-right: 8px; font-size: 1.1em;">🔄</span> Process Image
+                    </button>
+                </div>
+                
+                <div id="upload-status" style="font-size: 0.95rem; padding: 8px 0; color: #555; min-height: 20px;"></div>
+                
+                <!-- Camera modal -->
+                <div id="camera-modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8);">
+                    <div style="background-color: white; margin: 5% auto; padding: 30px; width: 90%; max-width: 800px; border-radius: 12px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                        <span id="close-camera" style="position: absolute; right: 25px; top: 20px; font-size: 28px; cursor: pointer; color: #666;">&times;</span>
+                        <h3 style="margin-top: 0; color: #4b6cb7; font-size: 1.5rem; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">Take a Picture</h3>
+                        <div style="display: flex; flex-direction: column; align-items: center;">
+                            <div style="width: 100%; position: relative; margin-bottom: 20px; border-radius: 8px; overflow: hidden; box-shadow: 0 3px 10px rgba(0,0,0,0.1);">
+                                <video id="camera-preview" style="width: 100%; max-height: 450px; background-color: #000; display: block;" autoplay playsinline></video>
+                                <canvas id="camera-canvas" style="width: 100%; max-height: 450px; display: none;"></canvas>
+                            </div>
+                            <div id="camera-controls" style="display: flex; gap: 15px; margin-top: 15px; justify-content: center; width: 100%;">
+                                <button id="capture-button" style="background: #4b6cb7; color: white; padding: 12px 25px; border-radius: 6px; cursor: pointer; border: none; font-weight: 500; font-size: 1rem; display: flex; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <span style="margin-right: 8px;">📸</span> Capture
+                                </button>
+                                <button id="retry-button" style="background: #f0f0f0; color: #333; padding: 12px 25px; border-radius: 6px; cursor: pointer; border: none; font-weight: 500; font-size: 1rem; display: none; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <span style="margin-right: 8px;">🔄</span> Try Again
+                                </button>
+                                <button id="use-photo-button" style="background: #182848; color: white; padding: 12px 25px; border-radius: 6px; cursor: pointer; border: none; font-weight: 500; font-size: 1rem; display: none; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <span style="margin-right: 8px;">✅</span> Use Photo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="image-tabs">
@@ -626,13 +659,24 @@
             setupImageUpload();
         });
         
-        // Set up image upload functionality
+        // Set up image upload and camera functionality
         function setupImageUpload() {
             const fileInput = document.getElementById('image-upload');
             const processButton = document.getElementById('process-button');
             const uploadStatus = document.getElementById('upload-status');
-            let uploadedFile = null;
+            const cameraButton = document.getElementById('camera-button');
+            const cameraModal = document.getElementById('camera-modal');
+            const closeCamera = document.getElementById('close-camera');
+            const cameraPreview = document.getElementById('camera-preview');
+            const cameraCanvas = document.getElementById('camera-canvas');
+            const captureButton = document.getElementById('capture-button');
+            const retryButton = document.getElementById('retry-button');
+            const usePhotoButton = document.getElementById('use-photo-button');
             
+            let uploadedFile = null;
+            let stream = null;
+            
+            // File input change event
             fileInput.addEventListener('change', function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -646,7 +690,98 @@
                 // Show file name and enable process button
                 uploadStatus.textContent = `Selected: ${file.name}`;
                 uploadedFile = file;
-                processButton.style.display = 'inline-block';
+                processButton.style.display = 'inline-flex';
+            });
+            
+            // Camera button click event
+            cameraButton.addEventListener('click', async function() {
+                try {
+                    // Reset canvas display
+                    cameraCanvas.style.display = 'none';
+                    cameraPreview.style.display = 'block';
+                    captureButton.style.display = 'flex';
+                    retryButton.style.display = 'none';
+                    usePhotoButton.style.display = 'none';
+                    
+                    // Open camera modal
+                    cameraModal.style.display = 'block';
+                    
+                    // Access webcam
+                    stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'environment' }, 
+                        audio: false 
+                    });
+                    
+                    // Connect stream to video element
+                    cameraPreview.srcObject = stream;
+                } catch (error) {
+                    console.error('Error accessing camera:', error);
+                    uploadStatus.innerHTML = '<span style="color: red;">Could not access camera. Please check permissions.</span>';
+                    cameraModal.style.display = 'none';
+                }
+            });
+            
+            // Close camera button
+            closeCamera.addEventListener('click', function() {
+                stopCameraStream();
+                cameraModal.style.display = 'none';
+            });
+            
+            // Function to stop camera stream
+            function stopCameraStream() {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    stream = null;
+                }
+            }
+            
+            // Capture button click event
+            captureButton.addEventListener('click', function() {
+                // Set canvas dimensions to match video
+                const width = cameraPreview.videoWidth;
+                const height = cameraPreview.videoHeight;
+                cameraCanvas.width = width;
+                cameraCanvas.height = height;
+                
+                // Draw video frame to canvas
+                const context = cameraCanvas.getContext('2d');
+                context.drawImage(cameraPreview, 0, 0, width, height);
+                
+                // Show the captured image and control buttons
+                cameraPreview.style.display = 'none';
+                cameraCanvas.style.display = 'block';
+                captureButton.style.display = 'none';
+                retryButton.style.display = 'flex';
+                usePhotoButton.style.display = 'flex';
+            });
+            
+            // Retry button click event
+            retryButton.addEventListener('click', function() {
+                // Show video preview again
+                cameraPreview.style.display = 'block';
+                cameraCanvas.style.display = 'none';
+                captureButton.style.display = 'flex';
+                retryButton.style.display = 'none';
+                usePhotoButton.style.display = 'none';
+            });
+            
+            // Use photo button click event
+            usePhotoButton.addEventListener('click', function() {
+                // Convert canvas to blob
+                cameraCanvas.toBlob(function(blob) {
+                    // Create a File object from the blob
+                    const currentDate = new Date();
+                    const fileName = `camera_capture_${currentDate.getTime()}.png`;
+                    uploadedFile = new File([blob], fileName, { type: 'image/png' });
+                    
+                    // Update UI
+                    uploadStatus.textContent = `Camera capture: ${fileName}`;
+                    processButton.style.display = 'inline-flex';
+                    
+                    // Close camera modal and stop stream
+                    stopCameraStream();
+                    cameraModal.style.display = 'none';
+                }, 'image/png');
             });
             
             // Process button click event
