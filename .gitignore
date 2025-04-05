@@ -30,6 +30,7 @@ dataset_detection_pre/
 # Model folders
 models/
 ultralitics/
+test_images/
 
 # Distribution / packaging
 .Python
