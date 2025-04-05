@@ -333,38 +333,6 @@ def process_detections_tokens(shapes):
     
     return all_top_indices, all_top_values, all_top_indices_idx
 
-def process_attention_queries():
-    global hook_outputs
-    
-    # Get all decoder attention layers
-    layers = [k for k in hook_outputs.keys() if 'decoder_queries_attention_layer' in k]
-
-    # Ensure they exist before processing
-    if not layers:
-        return []
-
-    # Each attention weights is a shape (batch_size, num_heads, 300, 300)
-    try:
-        attentions = []
-        for l in layers:
-            if isinstance(hook_outputs[l]['output'], tuple):
-                # If output is a tuple (output, attention_weights)
-                attention = hook_outputs[l]['output'][1][0].cpu().numpy()
-            else:
-                # If output is just attention_weights
-                attention = hook_outputs[l]['output'][0].cpu().numpy()
-                
-            # Average over heads if needed
-            if len(attention.shape) > 2:
-                attention = attention.mean(axis=0)
-                
-            attentions.append(attention)
-        
-        return attentions
-    except Exception as e:
-        print(f"Error processing attention queries: {e}")
-        return []
-
 def get_proposals_heatmap_overlay(image):
 
     global detection_results, int_to_label, det_to_color
@@ -443,7 +411,6 @@ def index():
 @app.route('/api/image')
 def get_image():
     image = process_image()
-    process_attention_queries()
     # Draw detections on a copy of the image
     image_with_detections = draw_detections_on_image(image.copy())
     
