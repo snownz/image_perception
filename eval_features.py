@@ -10,6 +10,8 @@ from src.models import ObjectDetectionModel
 from dataclasses import dataclass, field
 from torch import nn
 import random
+import traceback
+import math
 
 app = Flask(__name__)
 
@@ -95,6 +97,31 @@ class Config:
 def resize_image(image_tensor, size):
     return F.interpolate(image_tensor.unsqueeze(0), size=(size, size),
                          mode='bilinear', align_corners=False).squeeze(0)
+                         
+def draw_star(image, x, y, size, color, thickness=2):
+    """Draw a star on the image at position (x,y) with given size and color"""
+    # Calculate star points
+    outer_radius = size
+    inner_radius = size // 2
+    points = []
+    
+    for i in range(10):
+        # Use alternating outer and inner radius
+        radius = outer_radius if i % 2 == 0 else inner_radius
+        # Calculate angle (5 points = 10 vertices, 2π/10 radians per step)
+        angle = math.pi/5 * i
+        # Calculate point coordinates
+        px = int(x + radius * math.sin(angle))
+        py = int(y - radius * math.cos(angle))
+        points.append((px, py))
+    
+    # Convert points to numpy array
+    points = np.array(points, dtype=np.int32)
+    
+    # Draw the star as a filled polygon
+    cv2.polylines(image, [points], True, color, thickness)
+    
+    return image
 
 # Global variables
 hook_outputs = {}
@@ -167,11 +194,14 @@ def process_image(image_path='test_images/8.png'):
         boxes, scores, labels, detectors = model.predict(torch_image, stride_slices=32, confidence_threshold=0.3, iou_threshold=0.3)
         
     # Store detection results
-    detection_results['boxes'] = boxes
-    detection_results['scores'] = scores
-    detection_results['labels'] = labels
+    detection_results['boxes'] = boxes.cpu().numpy()
+    detection_results['scores'] = scores.cpu().numpy()
+    detection_results['labels'] = labels.cpu().numpy()
     detection_results['detectors'] = detectors.cpu().numpy()
     detection_results['indices'] = occurrence_indices(labels.cpu().numpy())
+
+    indices = occurrence_indices( detection_results['labels'] )
+    detection_results['labels'] = [ f"{int_to_label[l]}_{i}" for l, i in zip( detection_results['labels'], indices ) ]
     
     # Return the processed image for display
     return image
@@ -209,9 +239,6 @@ def extract_features_data():
 def draw_detections_on_image(image):
     global detection_results, int_to_label
 
-    detection_results['labels'] = detection_results['labels'].cpu().numpy()
-    indices = occurrence_indices( detection_results['labels'] )
-    detection_results['labels'] = [ f"{int_to_label[l]}_{i}" for l, i in zip( detection_results['labels'], indices ) ]
     labe_to_detector = { l:d for l, d in zip( detection_results['labels'], detection_results['detectors'] ) }
     int_to_color = { l: det_to_color[labe_to_detector[l]] for l in detection_results['labels'] }
     
@@ -339,6 +366,7 @@ def process_attention_queries():
         return []
 
 def get_proposals_heatmap_overlay(image):
+
     global detection_results, int_to_label, det_to_color
     
     if 'proposal_queries' not in hook_outputs or detection_results['labels'] is None:
@@ -561,6 +589,97 @@ def get_attention_weights(layer_key, query_idx):
         'query_idx': query_idx,
         'attention_weights': query_attention,
         'query_info': query_info
+    })
+
+@app.route('/api/highlighted_heatmap/<layer_key>/<int:query_idx>')
+def get_highlighted_heatmap(layer_key, query_idx):
+    global hook_outputs, detection_results
+    
+    # Start with the base heatmap
+    image = process_image()
+    base_heatmap = get_proposals_heatmap_overlay(image.copy())
+    
+    # Get attention weights for the selected query
+    if layer_key in hook_outputs:
+        try:
+            # Get attention weights
+            attention_output = hook_outputs[layer_key]['output']
+            
+            # For self-attention in transformer decoder, get attention weights
+            if isinstance(attention_output, tuple):
+                attention_weights = attention_output[1][0].cpu().numpy()
+            else:
+                attention_weights = attention_output[0].cpu().numpy()
+            
+            # Average over heads if there are multiple
+            if len(attention_weights.shape) > 2:
+                attention_weights = attention_weights.mean(axis=0)
+            
+            # Get the weights for the selected query
+            query_attention = attention_weights[query_idx]
+
+            # Get the top 95% percentile of attention weights
+            threshold = np.percentile( query_attention, 95 )
+            query_attention = np.where( query_attention > threshold, query_attention, -1e8 )
+
+            # Find the top 50 most attended queries
+            top_indices = np.argsort(query_attention)[-10:]
+            
+            # Get detector coordinates for highlighting
+            all_top_indices, all_top_values, all_top_indices_idx = process_detections_tokens([(80, 80), (40, 40), (20, 20)])
+            
+            original_h, original_w = base_heatmap.shape[0:2]
+            all_detector_coords = {}
+            
+            # Create a mapping of detector ID to coordinates
+            # Loop through each scale and identify query locations
+            for i, ((h, w), s_indices, values, dxs) in enumerate(zip([(80, 80), (40, 40), (20, 20)], all_top_indices, all_top_values, all_top_indices_idx)):
+                if len(s_indices) == 0:  # Skip if no indices for this scale
+                    continue
+                    
+                scale_y, scale_x = original_h / h, original_w / w
+                circle_radius = max(1, int(min(scale_y, scale_x) // 2))
+                
+                for idx, val, dx in zip(s_indices, values, dxs):
+                    idx = idx.item()
+                    feat_y, feat_x = idx // w, idx % w
+                    
+                    orig_y = int((feat_y + 0.5) * scale_y)
+                    orig_x = int((feat_x + 0.5) * scale_x)
+                    
+                    orig_y = min(max(0, orig_y), original_h - 1)
+                    orig_x = min(max(0, orig_x), original_w - 1)
+                    
+                    # Store coordinates by detector id
+                    all_detector_coords[dx.item()] = (orig_x, orig_y, circle_radius * 3)
+            
+            # Draw stars on the heatmap for the top attended queries
+            for idx in top_indices:
+                if idx in all_detector_coords:
+                    x, y, radius = all_detector_coords[idx]
+                    # Draw yellow star for top 50 connected queries
+                    draw_star(base_heatmap, x, y, radius, (0, 255, 255), thickness=2)
+            
+            # Highlight the selected query with a white star if it exists in our coordinates
+            if query_idx in all_detector_coords:
+                x, y, radius = all_detector_coords[query_idx]
+                # Draw white star for the selected query
+                draw_star(base_heatmap, x, y, radius, (255, 255, 255), thickness=3)
+            
+            # Convert to base64 for sending to frontend
+            _, buffer = cv2.imencode('.png', cv2.cvtColor(base_heatmap, cv2.COLOR_RGB2BGR))
+            return jsonify({
+                'heatmap': buffer.tobytes().hex()
+            })
+            
+        except Exception as e:
+            print(f"Error generating highlighted heatmap: {e}")
+            traceback.print_exc()
+    
+    # If anything fails, return the original heatmap
+    _, buffer = cv2.imencode('.png', cv2.cvtColor(base_heatmap, cv2.COLOR_RGB2BGR))
+    return jsonify({
+        'heatmap': buffer.tobytes().hex()
     })
 
 if __name__ == '__main__':

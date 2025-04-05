@@ -822,7 +822,12 @@
                         e.currentTarget.style.boxShadow = '0 0 10px rgba(255,255,255,0.8)';
                         
                         console.log(`Loading attention weights for query ${queryIdx} from layer ${activeAttentionLayer}`);
+                        
+                        // Load attention connections in the visualization
                         await loadAttentionWeights(activeAttentionLayer, queryIdx);
+                        
+                        // Also update the heatmap with stars for the connected queries
+                        await updateHeatmapWithConnections(activeAttentionLayer, queryIdx);
                     });
                     
                     interactiveContainer.appendChild(interactiveCircle);
@@ -1008,7 +1013,44 @@
                 });
             }
             
+            // Reset heatmap to original version
+            if (imageData.heatmap && document.getElementById('heatmap-image')) {
+                document.getElementById('heatmap-image').src = imageData.heatmap;
+            }
+            
             selectedQueryIdx = null;
+        }
+        
+        // Update the heatmap to show connections with stars
+        async function updateHeatmapWithConnections(layerKey, queryIdx) {
+            try {
+                // Check if there's a heatmap image to update
+                const heatmapImage = document.getElementById('heatmap-image');
+                if (!heatmapImage) return;
+                
+                console.log(`Updating heatmap with highlights for query ${queryIdx}`);
+                
+                // Fetch the highlighted heatmap
+                const response = await fetch(`/api/highlighted_heatmap/${layerKey}/${queryIdx}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Update the heatmap image with the highlighted version
+                if (data.heatmap) {
+                    const binary = hexToArrayBuffer(data.heatmap);
+                    const blob = new Blob([binary], {type: 'image/png'});
+                    const highlightedUrl = URL.createObjectURL(blob);
+                    
+                    heatmapImage.src = highlightedUrl;
+                    console.log("Heatmap updated with highlights");
+                }
+            } catch (error) {
+                console.error('Error updating heatmap with connections:', error);
+            }
         }
     </script>
 </body>
