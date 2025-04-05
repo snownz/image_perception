@@ -565,4 +565,4 @@ def get_attention_weights(layer_key, query_idx):
 
 if __name__ == '__main__':
     load_model()
-    app.run(debug=True, port=5002)
+    app.run(debug=True, port=5001)
