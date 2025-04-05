@@ -156,6 +156,32 @@
             font-size: 1.5rem;
             margin-right: 10px;
         }
+        
+        /* Custom styles for query circles */
+        .query-circle {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .query-circle:hover {
+            transform: scale(1.2);
+            z-index: 100;
+            box-shadow: 0 0 8px rgba(255,255,255,0.7) !important;
+        }
+        
+        /* Enhanced tooltips for queries */
+        .query-tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
         .intro-text {
             margin-bottom: 20px;
             line-height: 1.8;
@@ -752,6 +778,53 @@
             clearAttentionLines();
         }
         
+        // Create and show custom tooltip
+        function createTooltip(element, text) {
+            // Remove existing tooltip if any
+            const existingTooltip = document.getElementById('custom-tooltip');
+            if (existingTooltip) {
+                document.body.removeChild(existingTooltip);
+            }
+            
+            // Create tooltip
+            const tooltip = document.createElement('div');
+            tooltip.id = 'custom-tooltip';
+            tooltip.className = 'query-tooltip';
+            tooltip.textContent = text;
+            
+            // Add to document
+            document.body.appendChild(tooltip);
+            
+            // Position tooltip
+            const rect = element.getBoundingClientRect();
+            tooltip.style.left = rect.left + window.scrollX + 'px';
+            tooltip.style.top = rect.top + window.scrollY - tooltip.offsetHeight - 5 + 'px';
+            
+            return tooltip;
+        }
+        
+        // Setup tooltip events for query circles
+        function setupTooltipEvents() {
+            // For all query circles
+            document.querySelectorAll('.query-circle').forEach(circle => {
+                // Show tooltip on mouseover
+                circle.addEventListener('mouseover', (e) => {
+                    const tooltipText = e.target.title || `Query #${e.target.getAttribute('data-query-idx')}`;
+                    if (tooltipText) {
+                        createTooltip(e.target, tooltipText);
+                    }
+                });
+                
+                // Hide tooltip on mouseout
+                circle.addEventListener('mouseout', () => {
+                    const tooltip = document.getElementById('custom-tooltip');
+                    if (tooltip) {
+                        document.body.removeChild(tooltip);
+                    }
+                });
+            });
+        }
+        
         // Generate query circles for visualization
         function generateQueryCircles() {
             console.log("Generating query circles with detection results:", detection_results);
@@ -800,6 +873,14 @@
                     interactiveCircle.style.display = 'inline-block';
                     interactiveCircle.style.position = 'relative';
                     interactiveCircle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                    
+                    // Add title attribute for showing label on hover
+                    const labelName = int_to_label[label] || `Class ${label}`;
+                    interactiveCircle.title = `${labelName} (Detector #${detectorId})`;
+                    
+                    // Add data attributes for additional information
+                    interactiveCircle.setAttribute('data-label', label);
+                    interactiveCircle.setAttribute('data-detector', detectorId);
                     
                     // No label text is added to keep visualization clean
                     
@@ -862,9 +943,26 @@
                     allQueryCircle.style.margin = '2px';
                     allQueryCircle.style.display = 'inline-block';
                     
+                    // Add tooltip for hover
+                    let tooltipText = `Query #${i}`;
+                    
+                    // If this is a detection query, add more info
+                    if (detectionIndex !== -1) {
+                        const label = detection_results.labels[detectionIndex];
+                        const labelName = int_to_label[label] || `Class ${label}`;
+                        tooltipText = `${labelName} (Detector #${i})`;
+                    }
+                    
+                    allQueryCircle.title = tooltipText;
+                    
                     allQueriesContainer.appendChild(allQueryCircle);
                 }
             }
+            
+            // Setup tooltips after all circles are generated
+            setTimeout(() => {
+                setupTooltipEvents();
+            }, 100);
         }
         
         // Load attention weights for a specific query
