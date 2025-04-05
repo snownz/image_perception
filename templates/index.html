@@ -3,198 +3,469 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Model Feature Visualization</title>
+    <title>Neural Network Feature Visualization</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
         }
-        .container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
+        .hero {
+            background: linear-gradient(135deg, #4b6cb7, #182848);
+            color: white;
+            padding: 40px;
+            text-align: center;
         }
-        .images-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            margin-bottom: 20px;
-            width: 100%;
-        }
-        .image-container {
-            flex: 1;
-            min-width: 300px;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .features-container {
-            flex: 2;
-            min-width: 400px;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        .hero h1 {
+            font-size: 2.5rem;
             margin-bottom: 20px;
         }
-        .module-selector {
-            margin-bottom: 15px;
-        }
-        .channel-selector {
-            width: 100%;
-            margin: 10px 0;
-        }
-        .feature-image {
-            width: 100%;
-            height: auto;
-            margin-top: 10px;
-            border: 1px solid #ddd;
-        }
-        .feature-views {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            width: 100%;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-            display: block;
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 800px;
             margin: 0 auto;
         }
-        h2, h3 {
-            color: #333;
-            margin-top: 0;
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
         }
-        .stats {
-            margin-top: 10px;
-            padding: 10px;
-            background: #f9f9f9;
-            border-radius: 4px;
+        .section {
+            margin-bottom: 40px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 30px;
+        }
+        .section h2 {
+            color: #4b6cb7;
+            margin-top: 0;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        .section h3 {
+            color: #182848;
         }
         .image-tabs {
             display: flex;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
         }
         .tab {
             padding: 10px 15px;
             cursor: pointer;
-            border: 1px solid #ddd;
             background-color: #f9f9f9;
-            border-radius: 4px 4px 0 0;
             margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            transition: all 0.3s ease;
         }
         .tab.active {
-            background-color: white;
-            border-bottom: 2px solid #007bff;
+            background-color: #4b6cb7;
+            color: white;
+            font-weight: bold;
+        }
+        .image-container {
+            width: 100%;
+            margin-bottom: 20px;
+            overflow: hidden;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        .image-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .features-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .feature-card {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+        .channel-selector {
+            width: 100%;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        .channel-selector label {
+            margin-right: 10px;
+            width: 150px;
+        }
+        .channel-selector input[type="range"] {
+            flex: 1;
+            height: 8px;
+            -webkit-appearance: none;
+            background: #d3d3d3;
+            outline: none;
+            border-radius: 4px;
+        }
+        .channel-selector input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #4b6cb7;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .feature-image {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 15px;
+        }
+        .feature-image img {
+            aspect-ratio: 1;
+            object-fit: cover;
+            width: 100%;
+        }
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        .stats p {
+            margin: 0;
+            padding: 5px 10px;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .emoji-title {
+            font-size: 1.5rem;
+            margin-right: 10px;
+        }
+        .intro-text {
+            margin-bottom: 20px;
+            line-height: 1.8;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
         }
     </style>
 </head>
 <body>
-    <h1>Neural Network Feature Visualization</h1>
+    <div class="hero">
+        <h1>Neural Network Feature Visualization</h1>
+        <p>Explore the inner workings of a deep learning object detection model</p>
+    </div>
     
     <div class="container">
-        <div class="images-row">
+        <section class="section">
+            <div class="image-tabs">
+                <div class="tab active" data-tab="original">Original Image</div>
+                <div class="tab" data-tab="detections">Object Detections</div>
+            </div>
             <div class="image-container">
-                <div class="image-tabs">
-                    <div class="tab active" data-tab="original">Original</div>
-                    <div class="tab" data-tab="detections">Detections</div>
-                    <div class="tab" data-tab="heatmap">Proposals Heatmap</div>
-                </div>
-                <div id="image-view">
-                    <img id="display-image" src="" alt="Image View">
-                </div>
+                <img id="display-image" src="" alt="Neural Network Visualization">
             </div>
-        </div>
-        
-        <div class="feature-views">
-            <!-- Feature Maps -->
-            <div class="features-container" id="feature_maps-container">
-                <h2>Feature Maps (Basic)</h2>
-                
-                <div class="channel-selector">
-                    <label for="feature_maps-range">Channel: <span id="feature_maps-value">0</span> / <span id="feature_maps-total">0</span></label>
-                    <input type="range" id="feature_maps-range" min="0" value="0" data-module="feature_maps">
+        </section>
+
+        <section class="section">
+            <h2>🧠 Stage 1: Encoder (Feature Extraction & Context Building)</h2>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🔍</span> 1.1 Convolutional Backbone — A City of Watchtowers</h3>
+                <div class="intro-text">
+                    <p>Imagine the input image as a wide landscape:</p>
+                    <ul>
+                        <li>Convolutional layers are like <strong>watchtowers</strong>, each scanning a small patch of the image.</li>
+                        <li>As we stack these layers, the watchtowers get taller and see more abstract patterns—edges, textures, shapes, and eventually object parts.</li>
+                        <li>These observations are compiled into <strong>feature maps</strong>, like a tactical map of important landmarks in the scene.</li>
+                    </ul>
                 </div>
                 
-                <div class="feature-image">
-                    <img id="feature_maps-image" src="" alt="Feature Map">
-                </div>
-                
-                <div class="stats">
-                    <p>Min: <span id="feature_maps-min">-</span></p>
-                    <p>Max: <span id="feature_maps-max">-</span></p>
-                    <p>Mean: <span id="feature_maps-mean">-</span></p>
-                    <p>Shape: <span id="feature_maps-shape">-</span></p>
+                <div style="display: flex; justify-content: center; width: 100%; margin: 20px 0;">
+                    <div class="feature-card" id="feature_maps-container" style="max-width: 25%;">
+                        <h4>Feature Maps (Basic)</h4>
+                        <div class="channel-selector">
+                            <label for="feature_maps-range">Channel: <span id="feature_maps-value">0</span> / <span id="feature_maps-total">0</span></label>
+                            <input type="range" id="feature_maps-range" min="0" value="0" data-module="feature_maps">
+                        </div>
+                        <div class="feature-image" style="width: 100%;">
+                            <img id="feature_maps-image" src="" alt="Basic Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="feature_maps-min">-</span></p>
+                            <p>Max: <span id="feature_maps-max">-</span></p>
+                            <p>Mean: <span id="feature_maps-mean">-</span></p>
+                            <p>Shape: <span id="feature_maps-shape">-</span></p>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <!-- Small Objects Features -->
-            <div class="features-container" id="features_small-container">
-                <h2>Small Objects Detection Features</h2>
-                
-                <div class="channel-selector">
-                    <label for="features_small-range">Channel: <span id="features_small-value">0</span> / <span id="features_small-total">0</span></label>
-                    <input type="range" id="features_small-range" min="0" value="0" data-module="features_small">
-                </div>
-                
-                <div class="feature-image">
-                    <img id="features_small-image" src="" alt="Small Objects Feature Map">
-                </div>
-                
-                <div class="stats">
-                    <p>Min: <span id="features_small-min">-</span></p>
-                    <p>Max: <span id="features_small-max">-</span></p>
-                    <p>Mean: <span id="features_small-mean">-</span></p>
-                    <p>Shape: <span id="features_small-shape">-</span></p>
+            <div class="subsection">
+                <h3><span class="emoji-title">🌐</span> 1.2 Transformer Encoding — Global Awareness Across the Map</h3>
+                <div class="intro-text">
+                    <p>Once feature maps are formed, they are passed into a <strong>Transformer encoder</strong>:</p>
+                    <ul>
+                        <li>Each cell (pixel location) in the feature map becomes a <strong>node in a communication network</strong>.</li>
+                        <li>Every node can talk to every other node. This means a patch showing part of a car can understand that distant wheels and windows are part of the same object.</li>
+                        <li>This step gives every region <strong>global context</strong>, fusing together the <strong>local details</strong> and the <strong>big picture</strong>.</li>
+                    </ul>
                 </div>
             </div>
             
-            <!-- Medium Objects Features -->
-            <div class="features-container" id="features_medium-container">
-                <h2>Medium Objects Detection Features</h2>
-                
-                <div class="channel-selector">
-                    <label for="features_medium-range">Channel: <span id="features_medium-value">0</span> / <span id="features_medium-total">0</span></label>
-                    <input type="range" id="features_medium-range" min="0" value="0" data-module="features_medium">
+            <div class="subsection">
+                <h3><span class="emoji-title">🔎</span> 1.3 Multi-Scale Features — Switching Lenses</h3>
+                <div class="intro-text">
+                    <p>To detect objects of all sizes, the encoder creates <strong>three different feature map resolutions</strong>:</p>
+                    <ul>
+                        <li><strong>High-resolution</strong> for small objects.</li>
+                        <li><strong>Mid-resolution</strong> for medium objects.</li>
+                        <li><strong>Low-resolution</strong> for large objects.</li>
+                        <li>Like having <strong>three zoom lenses</strong>—each gives a different perspective, ensuring we don't miss anything from ants to elephants.</li>
+                    </ul>
                 </div>
                 
-                <div class="feature-image">
-                    <img id="features_medium-image" src="" alt="Medium Objects Feature Map">
+                <div class="features-row">
+                    <div class="feature-card" id="features_small-container">
+                        <h4>Small Objects Detection Features</h4>
+                        <div class="channel-selector">
+                            <label for="features_small-range">Channel: <span id="features_small-value">0</span> / <span id="features_small-total">0</span></label>
+                            <input type="range" id="features_small-range" min="0" value="0" data-module="features_small">
+                        </div>
+                        <div class="feature-image">
+                            <img id="features_small-image" src="" alt="Small Objects Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="features_small-min">-</span></p>
+                            <p>Max: <span id="features_small-max">-</span></p>
+                            <p>Mean: <span id="features_small-mean">-</span></p>
+                            <p>Shape: <span id="features_small-shape">-</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card" id="features_medium-container">
+                        <h4>Medium Objects Detection Features</h4>
+                        <div class="channel-selector">
+                            <label for="features_medium-range">Channel: <span id="features_medium-value">0</span> / <span id="features_medium-total">0</span></label>
+                            <input type="range" id="features_medium-range" min="0" value="0" data-module="features_medium">
+                        </div>
+                        <div class="feature-image">
+                            <img id="features_medium-image" src="" alt="Medium Objects Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="features_medium-min">-</span></p>
+                            <p>Max: <span id="features_medium-max">-</span></p>
+                            <p>Mean: <span id="features_medium-mean">-</span></p>
+                            <p>Shape: <span id="features_medium-shape">-</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card" id="features_large-container">
+                        <h4>Large Objects Detection Features</h4>
+                        <div class="channel-selector">
+                            <label for="features_large-range">Channel: <span id="features_large-value">0</span> / <span id="features_large-total">0</span></label>
+                            <input type="range" id="features_large-range" min="0" value="0" data-module="features_large">
+                        </div>
+                        <div class="feature-image">
+                            <img id="features_large-image" src="" alt="Large Objects Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="features_large-min">-</span></p>
+                            <p>Max: <span id="features_large-max">-</span></p>
+                            <p>Mean: <span id="features_large-mean">-</span></p>
+                            <p>Shape: <span id="features_large-shape">-</span></p>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="stats">
-                    <p>Min: <span id="features_medium-min">-</span></p>
-                    <p>Max: <span id="features_medium-max">-</span></p>
-                    <p>Mean: <span id="features_medium-mean">-</span></p>
-                    <p>Shape: <span id="features_medium-shape">-</span></p>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🎯 Stage 2: Decoder (Query-Based Detection)</h2>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">📍</span> 2.1 Region Proposals — A Grid of Possibilities</h3>
+                <div class="intro-text">
+                    <p>The first step in the detection process:</p>
+                    <ul>
+                        <li>Each cell across the feature maps is considered a <strong>candidate location for an object</strong>.</li>
+                        <li>Think of a <strong>grid overlay</strong> on the image, where each square whispers, "Maybe there's something here."</li>
+                        <li>The model evaluates all potential regions to find the most promising candidates.</li>
+                    </ul>
                 </div>
             </div>
             
-            <!-- Large Objects Features -->
-            <div class="features-container" id="features_large-container">
-                <h2>Large Objects Detection Features</h2>
-                
-                <div class="channel-selector">
-                    <label for="features_large-range">Channel: <span id="features_large-value">0</span> / <span id="features_large-total">0</span></label>
-                    <input type="range" id="features_large-range" min="0" value="0" data-module="features_large">
-                </div>
-                
-                <div class="feature-image">
-                    <img id="features_large-image" src="" alt="Large Objects Feature Map">
-                </div>
-                
-                <div class="stats">
-                    <p>Min: <span id="features_large-min">-</span></p>
-                    <p>Max: <span id="features_large-max">-</span></p>
-                    <p>Mean: <span id="features_large-mean">-</span></p>
-                    <p>Shape: <span id="features_large-shape">-</span></p>
+            <div class="subsection">
+                <h3><span class="emoji-title">🔎</span> 2.2 Selecting Queries — 300 Detectives on the Scene</h3>
+                <div class="intro-text">
+                    <p>Visualized by the circles in the heatmap and bounding boxes in the detection view:</p>
+                    <ul>
+                        <li>From all candidate regions, the model selects <strong>300 detection tokens</strong> (queries).</li>
+                        <li>Each one acts like a <strong>detective</strong>, investigating part of the scene to decide: <em>"Is there something here worth reporting?"</em></li>
+                        <li>These detectives collaborate through attention mechanisms to refine their understanding of what they're looking at.</li>
+                        <li>Only the most confident detections are shown in the final output.</li>
+                    </ul>
                 </div>
             </div>
-        </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🧭</span> 2.3 Self-Attention Among Queries — Team Coordination</h3>
+                <div class="intro-text">
+                    <p>The key to effective object detection:</p>
+                    <ul>
+                        <li>All 300 queries attend to each other via <strong>self-attention</strong>.</li>
+                        <li>This is like a <strong>briefing room</strong>, where detectives compare notes and decide who handles which suspect (object), avoiding overlap and ensuring full coverage.</li>
+                        <li>The visualization below shows how queries exchange information to make better decisions.</li>
+                    </ul>
+                </div>
+                
+                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-top: 20px;">
+                    <h4>Query Self-Attention Visualization</h4>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label for="attention-layer-select">Decoder Layer: </label>
+                        <select id="attention-layer-select" style="padding: 5px; border-radius: 4px; margin-left: 10px;"></select>
+                    </div>
+                    
+                    <div style="margin-top: 15px; position: relative;">
+                        <!-- Query Attention Visualization Container -->
+                        <div style="position: relative; width: 100%; height: 600px; overflow: hidden; border: 1px solid #eee; border-radius: 8px;">
+                            <!-- Top Row - Interactive Detected Queries -->
+                            <div style="padding: 15px; border-bottom: 1px solid #eee;">
+                                <h5>Detection Queries (Click to visualize attention)</h5>
+                                <div id="interactive-queries-container" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0;"></div>
+                            </div>
+                            
+                            <!-- Center - Connection Lines (SVG) -->
+                            <div style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 5;">
+                                <svg id="attention-lines" width="100%" height="100%" style="position: absolute; top: 0; left: 0;"></svg>
+                            </div>
+                            
+                            <!-- Bottom Row - All 300 Queries -->
+                            <div style="padding: 15px; height: 400px; overflow-x: auto;">
+                                <h5>All 300 Queries (Showing attention weights)</h5>
+                                <div id="all-queries-container" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 10px 0; min-width: 100%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 15px;">
+                        <p><strong>How to use:</strong> Click on a detection query in the top row to see how it attends to all 300 queries below. The thickness of the connecting lines represents attention weight.</p>
+                        
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px;">
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 12px; height: 12px; background-color: #ccc; border-radius: 50%; margin-right: 5px;"></div>
+                                <span>Non-detection query</span>
+                            </div>
+                            <div id="class-legend" style="display: flex; flex-wrap: wrap; gap: 15px;"></div>
+                        </div>
+                        
+                        <script>
+                            // Populate legend with class colors when data is loaded
+                            document.addEventListener('DOMContentLoaded', () => {
+                                // Add a slight delay to ensure label mappings are loaded
+                                setTimeout(() => {
+                                    const legendContainer = document.getElementById('class-legend');
+                                    if (!legendContainer) return;
+                                    
+                                    // Clear any existing content
+                                    legendContainer.innerHTML = '';
+                                    
+                                    // Create legend entries for each class
+                                    if (int_to_label && Object.keys(int_to_label).length > 0) {
+                                        // Limit to the first 10 classes to avoid crowding
+                                        const keys = Object.keys(int_to_label).slice(0, 10);
+                                        
+                                        keys.forEach(key => {
+                                            const color = int_to_color[key];
+                                            if (color) {
+                                                const colorRgb = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                                                const label = int_to_label[key];
+                                                
+                                                const legendItem = document.createElement('div');
+                                                legendItem.style.display = 'flex';
+                                                legendItem.style.alignItems = 'center';
+                                                
+                                                const colorBox = document.createElement('div');
+                                                colorBox.style.width = '12px';
+                                                colorBox.style.height = '12px';
+                                                colorBox.style.backgroundColor = colorRgb;
+                                                colorBox.style.borderRadius = '50%';
+                                                colorBox.style.marginRight = '5px';
+                                                
+                                                const labelText = document.createElement('span');
+                                                labelText.textContent = label;
+                                                
+                                                legendItem.appendChild(colorBox);
+                                                legendItem.appendChild(labelText);
+                                                legendContainer.appendChild(legendItem);
+                                            }
+                                        });
+                                    }
+                                }, 1000);
+                            });
+                        </script>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🗺️</span> Region Proposals Heatmap Visualization</h3>
+                <div class="intro-text">
+                    <p>Below you can see the actual region proposals from the model:</p>
+                    <ul>
+                        <li>The <strong>heatmap</strong> shows activation intensity across the image.</li>
+                        <li>Brighter areas indicate stronger candidates for object presence.</li>
+                        <li>The <strong>circles</strong> represent selected query tokens, with different sizes based on which feature map they came from:</li>
+                    </ul>
+                    
+                    <div style="display: flex; justify-content: center; margin: 20px 0;">
+                        <div style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                            <h4 style="margin-top: 0;">Query Token Legend</h4>
+                            <div style="display: flex; gap: 20px;">
+                                <div style="display: flex; align-items: center;">
+                                    <div style="width: 10px; height: 10px; border: 2px solid #4b6cb7; border-radius: 50%; margin-right: 10px;"></div>
+                                    <span>Small circles: queries from large feature maps</span>
+                                </div>
+                                <div style="display: flex; align-items: center;">
+                                    <div style="width: 20px; height: 20px; border: 2px solid #4b6cb7; border-radius: 50%; margin-right: 10px;"></div>
+                                    <span>Medium circles: queries from medium feature maps</span>
+                                </div>
+                                <div style="display: flex; align-items: center;">
+                                    <div style="width: 30px; height: 30px; border: 2px solid #4b6cb7; border-radius: 50%; margin-right: 10px;"></div>
+                                    <span>Large circles: queries from small feature maps</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="image-container">
+                    <div class="image-tabs" style="justify-content: center; margin-bottom: 10px;">
+                        <div class="tab active" data-tab="heatmap">Region Proposals Heatmap</div>
+                    </div>
+                    <img id="heatmap-image" src="" alt="Region Proposals Heatmap">
+                </div>
+            </div>
+        </section>
     </div>
 
     <script>
@@ -205,12 +476,28 @@
             heatmap: null
         };
         
+        // Store attention data
+        let attentionLayers = [];
+        let activeAttentionLayer = null;
+        let selectedQueryIdx = null;
+        let detection_results = null;
+        
+        // Mappings for label names and colors
+        let int_to_label = {};
+        let int_to_color = {};
+        let det_to_color = {};
+        
         document.addEventListener('DOMContentLoaded', async () => {
             // Load image and detections
             await loadImages();
             
-            // Load features data
+            // Load features data and attention layers
             await loadFeaturesData();
+            
+            // Load attention visualization if available
+            if (attentionLayers.length > 0) {
+                initializeAttentionVisualization();
+            }
             
             // Set up event listeners
             document.querySelectorAll('input[type="range"]').forEach(slider => {
@@ -225,8 +512,11 @@
         });
         
         function switchTab(event) {
-            // Remove active class from all tabs
-            document.querySelectorAll('.tab').forEach(tab => {
+            // Get the parent container of the tab
+            const tabContainer = event.target.closest('.image-tabs');
+            
+            // Remove active class from all tabs in this container
+            tabContainer.querySelectorAll('.tab').forEach(tab => {
                 tab.classList.remove('active');
             });
             
@@ -235,8 +525,16 @@
             
             // Show the corresponding image
             const tabType = event.target.dataset.tab;
-            if (imageData[tabType]) {
-                document.getElementById('display-image').src = imageData[tabType];
+            
+            // Determine which image container to update
+            if (tabContainer.nextElementSibling.querySelector('#display-image')) {
+                // This is the main image container
+                if (imageData[tabType]) {
+                    document.getElementById('display-image').src = imageData[tabType];
+                }
+            } else if (tabContainer.nextElementSibling.querySelector('#heatmap-image')) {
+                // This is the heatmap container
+                document.getElementById('heatmap-image').src = imageData['heatmap'];
             }
         }
         
@@ -250,8 +548,35 @@
                 imageData.detections = createImageUrl(data.detections);
                 imageData.heatmap = createImageUrl(data.heatmap);
                 
-                // Show the default image (original)
+                // Store detection results for the attention visualization
+                if (data.detection_results) {
+                    detection_results = data.detection_results;
+                    
+                    // Set up int_to_label mapping using actual class names from the backend
+                    // This is usually defined in the backend and we're recreating it here
+                    fetch('/api/label_mapping')
+                        .then(response => response.json())
+                        .then(data => {
+                            int_to_label = data.int_to_label || {};
+                        })
+                        .catch(error => {
+                            console.error('Error fetching label mapping:', error);
+                            // Create a fallback mapping if needed
+                            detection_results.labels.forEach(label => {
+                                if (!int_to_label[label]) {
+                                    int_to_label[label] = `Class ${label}`;
+                                }
+                            });
+                        });
+                }
+                
+                // Show the default images
                 document.getElementById('display-image').src = imageData.original;
+                
+                // Set the heatmap image if it exists on the page
+                if (document.getElementById('heatmap-image')) {
+                    document.getElementById('heatmap-image').src = imageData.heatmap;
+                }
             } catch (error) {
                 console.error('Error loading images:', error);
             }
@@ -272,6 +597,11 @@
                 const data = await response.json();
                 
                 featuresData = data.features_data;
+                
+                // Store attention layers if available
+                if (data.attention_layer_keys && data.attention_layer_keys.length > 0) {
+                    attentionLayers = data.attention_layer_keys;
+                }
                 
                 // Hide containers for modules that don't have data
                 for (const moduleKey of data.module_keys) {
@@ -351,6 +681,332 @@
                 bytes[i/2] = parseInt(hex.substr(i, 2), 16);
             }
             return bytes.buffer;
+        }
+        
+        // Initialize the attention visualization component
+        function initializeAttentionVisualization() {
+            // Set up variables for color mapping from Python
+            if (!int_to_label || Object.keys(int_to_label).length === 0) {
+                int_to_label = {};
+                int_to_color = {};
+                det_to_color = {};
+            
+                // First try to fetch label and color mappings from backend API
+                fetch('/api/label_mapping')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Convert color arrays back from strings to numbers if needed
+                        int_to_label = data.int_to_label || {};
+                        
+                        // Convert string keys back to numbers for the color maps
+                        if (data.int_to_color) {
+                            Object.keys(data.int_to_color).forEach(key => {
+                                int_to_color[parseInt(key)] = data.int_to_color[key];
+                            });
+                        }
+                        
+                        if (data.det_to_color) {
+                            Object.keys(data.det_to_color).forEach(key => {
+                                det_to_color[parseInt(key)] = data.det_to_color[key];
+                            });
+                        }
+                        
+                        // Regenerate visualization with the new mappings
+                        generateQueryCircles();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching label mapping:', error);
+                        // Use fallback random colors if API fails
+                        fallbackColorGeneration();
+                    });
+            }
+            
+            // Fallback function to generate color mappings if API fails
+            function fallbackColorGeneration() {
+                // Generate color mappings based on detection_results
+                if (detection_results && detection_results.labels) {
+                    // Create label mappings
+                    detection_results.labels.forEach(label => {
+                        if (label !== undefined) {
+                            int_to_label[label] = `Class ${label}`;
+                            
+                            if (!int_to_color[label]) {
+                                int_to_color[label] = [
+                                    Math.floor(Math.random() * 200 + 55),
+                                    Math.floor(Math.random() * 200 + 55),
+                                    Math.floor(Math.random() * 200 + 55)
+                                ];
+                            }
+                        }
+                    });
+                    
+                    // Generate detector colors
+                    detection_results.detectors.forEach(detector => {
+                        if (!det_to_color[detector]) {
+                            det_to_color[detector] = [
+                                Math.floor(Math.random() * 200 + 55),
+                                Math.floor(Math.random() * 200 + 55),
+                                Math.floor(Math.random() * 200 + 55)
+                            ];
+                        }
+                    });
+                    
+                    // Regenerate visualization with fallback colors
+                    generateQueryCircles();
+                }
+            }
+            
+            // Populate attention layer dropdown
+            const layerSelect = document.getElementById('attention-layer-select');
+            layerSelect.innerHTML = '';
+            
+            attentionLayers.forEach((layer, index) => {
+                const option = document.createElement('option');
+                option.value = layer;
+                option.textContent = `Layer ${index}`;
+                layerSelect.appendChild(option);
+            });
+            
+            // Set the first layer as active
+            if (attentionLayers.length > 0) {
+                activeAttentionLayer = attentionLayers[0];
+                layerSelect.value = activeAttentionLayer;
+            }
+            
+            // Set up event listener for layer selection
+            layerSelect.addEventListener('change', () => {
+                activeAttentionLayer = layerSelect.value;
+                generateQueryCircles();
+                clearAttentionLines();
+            });
+            
+            // Generate initial query circles
+            generateQueryCircles();
+            
+            // Clear any existing attention lines
+            clearAttentionLines();
+        }
+        
+        // Generate query circles for visualization
+        function generateQueryCircles() {
+            console.log("Generating query circles with detection results:", detection_results);
+            
+            // Clear existing query containers
+            const interactiveContainer = document.getElementById('interactive-queries-container');
+            const allQueriesContainer = document.getElementById('all-queries-container');
+            
+            if (!interactiveContainer || !allQueriesContainer) {
+                console.error("Could not find query containers");
+                return;
+            }
+            
+            interactiveContainer.innerHTML = '';
+            allQueriesContainer.innerHTML = '';
+            
+            // If we have detection results, use them to visualize attention
+            if (detection_results && detection_results.boxes && detection_results.boxes.length > 0) {
+                const numDetections = detection_results.boxes.length; // Get all detections
+                
+                // First create interactive detection queries for the top row
+                for (let i = 0; i < numDetections; i++) {
+                    const detectorId = detection_results.detectors[i];
+                    const label = detection_results.labels[i];
+                    
+                    // Create interactive query circle
+                    const interactiveCircle = document.createElement('div');
+                    interactiveCircle.className = 'query-circle interactive';
+                    interactiveCircle.setAttribute('data-query-idx', detectorId);
+                    
+                    // Style based on class label
+                    const size = '30px';
+                    let color = '#cccccc'; // Default gray
+                    
+                    // Get appropriate color if available
+                    if (int_to_color[label] && Array.isArray(int_to_color[label])) {
+                        color = `rgb(${int_to_color[label][0]}, ${int_to_color[label][1]}, ${int_to_color[label][2]})`;
+                    }
+                    
+                    interactiveCircle.style.width = size;
+                    interactiveCircle.style.height = size;
+                    interactiveCircle.style.borderRadius = '50%';
+                    interactiveCircle.style.backgroundColor = color;
+                    interactiveCircle.style.margin = '5px';
+                    interactiveCircle.style.cursor = 'pointer';
+                    interactiveCircle.style.display = 'inline-block';
+                    interactiveCircle.style.position = 'relative';
+                    interactiveCircle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                    
+                    // Add label if available
+                    if (label !== undefined) {
+                        const labelEl = document.createElement('span');
+                        const labelName = int_to_label[label] || `Class ${label}`;
+                        labelEl.textContent = labelName;
+                        labelEl.style.position = 'absolute';
+                        labelEl.style.left = '120%';
+                        labelEl.style.top = '50%';
+                        labelEl.style.transform = 'translateY(-50%)';
+                        labelEl.style.fontSize = '12px';
+                        labelEl.style.whiteSpace = 'nowrap';
+                        interactiveCircle.appendChild(labelEl);
+                    }
+                    
+                    // Add click event to show attention weights
+                    interactiveCircle.addEventListener('click', async (e) => {
+                        const queryIdx = parseInt(e.currentTarget.getAttribute('data-query-idx'));
+                        selectedQueryIdx = queryIdx;
+                        
+                        document.querySelectorAll('.query-circle.selected').forEach(el => {
+                            el.classList.remove('selected');
+                        });
+                        e.currentTarget.classList.add('selected');
+                        
+                        await loadAttentionWeights(activeAttentionLayer, queryIdx);
+                    });
+                    
+                    interactiveContainer.appendChild(interactiveCircle);
+                }
+                
+                // Now create all 300 query circles for the bottom row
+                for (let i = 0; i < 300; i++) {
+                    const allQueryCircle = document.createElement('div');
+                    allQueryCircle.className = 'query-circle all';
+                    allQueryCircle.setAttribute('data-query-idx', i);
+                    
+                    // Find if this query is a detection query by checking if it's in the detectors array
+                    const detectors = detection_results.detectors.map(d => Number(d)); // Ensure numeric comparison
+                    const detectionIndex = detectors.indexOf(i);
+                    
+                    // Style query circles based on whether they're detection queries or not
+                    const size = '12px';
+                    let color = '#cccccc'; // Default gray for non-detection queries
+                    
+                    if (detectionIndex !== -1) {
+                        // This is a detection query, color it by class
+                        const label = detection_results.labels[detectionIndex];
+                        if (int_to_color[label] && Array.isArray(int_to_color[label])) {
+                            color = `rgb(${int_to_color[label][0]}, ${int_to_color[label][1]}, ${int_to_color[label][2]})`;
+                        }
+                    }
+                    
+                    allQueryCircle.style.width = size;
+                    allQueryCircle.style.height = size;
+                    allQueryCircle.style.borderRadius = '50%';
+                    allQueryCircle.style.backgroundColor = color;
+                    allQueryCircle.style.margin = '2px';
+                    allQueryCircle.style.display = 'inline-block';
+                    
+                    allQueriesContainer.appendChild(allQueryCircle);
+                }
+            }
+        }
+        
+        // Load attention weights for a specific query
+        async function loadAttentionWeights(layerKey, queryIdx) {
+            try {
+                clearAttentionLines(); // Clear existing lines
+                
+                const response = await fetch(`/api/attention/${layerKey}/${queryIdx}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                drawAttentionLines(data.attention_weights);
+                
+            } catch (error) {
+                console.error('Error loading attention weights:', error);
+            }
+        }
+        
+        // Draw attention lines based on weights
+        function drawAttentionLines(weights) {
+            const svg = document.getElementById('attention-lines');
+            svg.innerHTML = ''; // Clear existing lines
+            
+            const interactiveContainer = document.getElementById('interactive-queries-container');
+            const allQueriesContainer = document.getElementById('all-queries-container');
+            
+            if (!svg || !interactiveContainer || !allQueriesContainer) {
+                console.error("Could not find required elements for drawing attention lines");
+                return;
+            }
+            
+            // Get the source query circle (the one that was clicked)
+            const sourceCircle = interactiveContainer.querySelector(`.query-circle.selected`);
+            if (!sourceCircle) {
+                console.error("No source query circle selected");
+                return;
+            }
+            
+            // Get source circle position
+            const sourceRect = sourceCircle.getBoundingClientRect();
+            const svgRect = svg.getBoundingClientRect();
+            
+            // Calculate source circle center in SVG coordinates
+            const sourceX = sourceRect.left - svgRect.left + sourceRect.width/2;
+            const sourceY = sourceRect.top - svgRect.top + sourceRect.height/2;
+            
+            // Set a threshold to only show significant connections
+            const maxWeight = Math.max(...weights);
+            const threshold = maxWeight * 0.05; // Show connections with ≥ 5% of max weight
+            
+            // Get the detection index for highlighting the corresponding circles
+            const selectedQueryId = parseInt(sourceCircle.getAttribute('data-query-idx'));
+            
+            // Draw lines to all 300 query circles with significant attention
+            const allQueryCircles = allQueriesContainer.querySelectorAll('.query-circle.all');
+            allQueryCircles.forEach((targetCircle, idx) => {
+                const weight = weights[idx];
+                if (weight < threshold) return; // Skip weak connections
+                
+                const targetRect = targetCircle.getBoundingClientRect();
+                
+                // Highlight the target circle if it's the current selected query
+                const targetId = parseInt(targetCircle.getAttribute('data-query-idx'));
+                if (targetId === selectedQueryId) {
+                    targetCircle.style.border = '2px solid white';
+                    targetCircle.style.boxShadow = '0 0 5px rgba(255,255,255,0.8)';
+                }
+                
+                // Calculate target circle center in SVG coordinates
+                const targetX = targetRect.left - svgRect.left + targetRect.width/2;
+                const targetY = targetRect.top - svgRect.top + targetRect.height/2;
+                
+                // Create line
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', sourceX);
+                line.setAttribute('y1', sourceY);
+                line.setAttribute('x2', targetX);
+                line.setAttribute('y2', targetY);
+                
+                // Scale the stroke width based on weight
+                const maxStrokeWidth = 4;
+                const strokeWidth = (weight / maxWeight) * maxStrokeWidth;
+                line.setAttribute('stroke-width', strokeWidth);
+                
+                // Color based on weight
+                const opacity = Math.max(0.1, weight / maxWeight);
+                line.setAttribute('stroke', `rgba(75, 108, 183, ${opacity})`);
+                
+                svg.appendChild(line);
+            });
+        }
+        
+        // Clear all attention visualization lines and highlighting
+        function clearAttentionLines() {
+            const svg = document.getElementById('attention-lines');
+            if (svg) svg.innerHTML = '';
+            
+            // Also remove highlighting from all query circles
+            const allQueryCircles = document.querySelectorAll('.query-circle.all');
+            if (allQueryCircles) {
+                allQueryCircles.forEach(circle => {
+                    circle.style.border = 'none';
+                    circle.style.boxShadow = 'none';
+                });
+            }
         }
     </script>
 </body>

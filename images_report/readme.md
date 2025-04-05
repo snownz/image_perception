@@ -1,8 +1,6 @@
-# RT-DETR: A Visual Story of Real-Time Detection with Transformers
-
 ## 🧠 Stage 1: Encoder (Feature Extraction & Context Building)
 
-### 🔍 1.1 Convolutional Backbone — *A City of Watchtowers*
+### 🔍 1.1 Convolutional Backbone — *A City of Watchtowers* ( Feature Maps (Basic) )
 
 - Imagine the input image as a wide landscape.
 - Convolutional layers are like **watchtowers**, each scanning a small patch of the image.
@@ -16,7 +14,7 @@
 - Every node can talk to every other node. This means a patch showing part of a car can understand that distant wheels and windows are part of the same object.
 - This step gives every region **global context**, fusing together the **local details** and the **big picture**.
 
-### 🔎 1.3 Multi-Scale Features — *Switching Lenses*
+### 🔎 1.3 Multi-Scale Features — *Switching Lenses* (Small Objects Detection Features, Medium Objects Detection Features, Large Objects Detection Features)
 
 - To detect objects of all sizes, the encoder creates **three different feature map resolutions**:
   - **High-resolution** for small objects.
@@ -33,7 +31,7 @@
 - Each cell across the feature maps is considered a **candidate location for an object**.
 - Think of a **grid overlay** on the image, where each square whispers, “Maybe there’s something here.”
 
-### 🔎 2.2 Selecting Queries — *300 Detectives on the Scene*
+### 🔎 2.2 Selecting Queries — *300 Detectives on the Scene* ( Queries selections )
 
 - From all candidate regions, the model selects **300 detection tokens** (queries).
 - Each one acts like a **detective**, investigating part of the scene to decide: *“Is there something here worth reporting?”*
