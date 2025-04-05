@@ -196,7 +196,7 @@
 </head>
 <body>
     <div class="hero">
-        <h1>Neural Network Feature Visualization</h1>
+        <h1>Smart Minds Capstone Project</h1>
         <p>Explore the inner workings of a deep learning object detection model</p>
     </div>
     
@@ -470,6 +470,53 @@
             
             
         </section>
+
+        <section class="section">
+            <h2>🧾 Stage 3: Detection (Final Predictions)</h2>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🏷️</span> 3.1 Object Class Prediction — Identifying What's There</h3>
+                <div class="intro-text">
+                    <p>After queries have gathered all necessary context:</p>
+                    <ul>
+                        <li>The model predicts <strong>what kind of object</strong> each query is looking at (if any).</li>
+                        <li>Is it a person, a car, a stop sign, or something else?</li>
+                        <li>For each query, a <strong>confidence score</strong> is assigned to each possible class.</li>
+                        <li>Only predictions with high enough confidence scores are kept.</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">📏</span> 3.2 Bounding Box Prediction — Locating Objects Precisely</h3>
+                <div class="intro-text">
+                    <p>In parallel with class prediction:</p>
+                    <ul>
+                        <li>The model predicts the <strong>exact coordinates</strong> of each object.</li>
+                        <li>These coordinates form a <strong>bounding box</strong> around the detected object.</li>
+                        <li>The prediction includes: top-left corner (x, y), width, and height.</li>
+                        <li>This is why we say the model does "object detection" not just "classification"—it both identifies <em>what</em> objects are present and <em>where</em> they are.</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🎯</span> 3.3 Final Results — The Complete Detection</h3>
+                <div class="intro-text">
+                    <p>The output combines class and location predictions:</p>
+                    <ul>
+                        <li>Only the <strong>most confident detections</strong> are kept.</li>
+                        <li>Overlapping boxes for the same object are merged through Non-Maximum Suppression (NMS).</li>
+                        <li>Each final detection includes a class label, confidence score, and precise bounding box.</li>
+                        <li>The image below shows the complete detection result.</li>
+                    </ul>
+                </div>
+                
+                <div class="image-container">
+                    <img id="detections-image" src="" alt="Final Detection Results">
+                </div>
+            </div>
+        </section>
     </div>
 
     <script>
@@ -585,6 +632,19 @@
                 // This is the main image container
                 if (imageData[tabType]) {
                     document.getElementById('display-image').src = imageData[tabType];
+                    
+                    // Also update the detections image in Stage 3 to match
+                    // If we're showing detections in the main view, also update the Stage 3 detections image
+                    const detectionsImage = document.getElementById('detections-image');
+                    if (detectionsImage) {
+                        if (tabType === 'detections') {
+                            // When detections tab is active, show detections in the Stage 3 section
+                            detectionsImage.src = imageData.detections;
+                        } else {
+                            // Otherwise still show detections in the Stage 3 section (it should always show detections)
+                            detectionsImage.src = imageData.detections;
+                        }
+                    }
                 }
             } else if (tabContainer.nextElementSibling.querySelector('#heatmap-image')) {
                 // This is the heatmap container
@@ -614,6 +674,11 @@
                 // Set the heatmap image if it exists on the page
                 if (document.getElementById('heatmap-image')) {
                     document.getElementById('heatmap-image').src = imageData.heatmap;
+                }
+                
+                // Set the detections image in the Stage 3 section if it exists
+                if (document.getElementById('detections-image')) {
+                    document.getElementById('detections-image').src = imageData.detections;
                 }
             } catch (error) {
                 console.error('Error loading images:', error);
