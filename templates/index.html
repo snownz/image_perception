@@ -406,47 +406,34 @@
                             <div id="class-legend" style="display: flex; flex-wrap: wrap; gap: 15px;"></div>
                             
                             <script>
-                                // Populate legend with class colors when data is loaded
+                                // Populate legend with detection query colors when data is loaded
                                 document.addEventListener('DOMContentLoaded', () => {
-                                    // Add a slight delay to ensure label mappings are loaded
+                                    // Add a slight delay to ensure detection data is loaded
                                     setTimeout(() => {
                                         const legendContainer = document.getElementById('class-legend');
-                                        if (!legendContainer) return;
+                                        if (!legendContainer || !detection_results) return;
                                         
                                         // Clear any existing content
                                         legendContainer.innerHTML = '';
                                         
-                                        // Create legend entries for each class
-                                        if (int_to_label && Object.keys(int_to_label).length > 0) {
-                                            // Limit to the first 6 classes to avoid crowding
-                                            const keys = Object.keys(int_to_label).slice(0, 6);
-                                            
-                                            keys.forEach(key => {
-                                                const color = int_to_color[key];
-                                                if (color) {
-                                                    const colorRgb = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-                                                    const label = int_to_label[key];
-                                                    
-                                                    const legendItem = document.createElement('div');
-                                                    legendItem.style.display = 'flex';
-                                                    legendItem.style.alignItems = 'center';
-                                                    
-                                                    const colorBox = document.createElement('div');
-                                                    colorBox.style.width = '12px';
-                                                    colorBox.style.height = '12px';
-                                                    colorBox.style.backgroundColor = colorRgb;
-                                                    colorBox.style.borderRadius = '50%';
-                                                    colorBox.style.marginRight = '5px';
-                                                    
-                                                    const labelText = document.createElement('span');
-                                                    labelText.textContent = label;
-                                                    
-                                                    legendItem.appendChild(colorBox);
-                                                    legendItem.appendChild(labelText);
-                                                    legendContainer.appendChild(legendItem);
-                                                }
-                                            });
-                                        }
+                                        // Create a simpler legend explaining the coloring
+                                        const legendItem = document.createElement('div');
+                                        legendItem.style.display = 'flex';
+                                        legendItem.style.alignItems = 'center';
+                                        
+                                        const colorBox = document.createElement('div');
+                                        colorBox.style.width = '12px';
+                                        colorBox.style.height = '12px';
+                                        colorBox.style.backgroundColor = '#3388FF';
+                                        colorBox.style.borderRadius = '50%';
+                                        colorBox.style.marginRight = '5px';
+                                        
+                                        const labelText = document.createElement('span');
+                                        labelText.textContent = "Detector queries (uniquely colored by ID)";
+                                        
+                                        legendItem.appendChild(colorBox);
+                                        legendItem.appendChild(labelText);
+                                        legendContainer.appendChild(legendItem);
                                     }, 1000);
                                 });
                             </script>
@@ -478,11 +465,61 @@
         let int_to_color = {};
         let det_to_color = {};
         
+        // Function to load label and color mappings
+        async function loadLabelMappings() {
+            try {
+                const response = await fetch('/api/label_mapping');
+                const data = await response.json();
+                
+                // Load label mapping
+                int_to_label = data.int_to_label || {};
+                
+                // Load detector color mapping
+                if (data.det_to_color) {
+                    Object.keys(data.det_to_color).forEach(key => {
+                        det_to_color[parseInt(key)] = data.det_to_color[key];
+                    });
+                    console.log(`Loaded ${Object.keys(det_to_color).length} detector colors from server`);
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Error loading label mappings:', error);
+                // Set up fallback colors
+                generateFallbackColors();
+                return false;
+            }
+        }
+        
+        // Generate fallback colors for all possible detection queries
+        function generateFallbackColors() {
+            console.log("Generating fallback colors");
+            
+            // Generate basic label mappings
+            for (let i = 0; i < 24; i++) {
+                int_to_label[i] = `Class ${i}`;
+            }
+            
+            // Generate detector colors for all possible queries (0-299)
+            for (let i = 0; i < 300; i++) {
+                det_to_color[i] = [
+                    Math.floor(Math.random() * 200 + 55),
+                    Math.floor(Math.random() * 200 + 55),
+                    Math.floor(Math.random() * 200 + 55)
+                ];
+            }
+        }
+        
         document.addEventListener('DOMContentLoaded', async () => {
-            // Load image and detections
+            console.log("DOM loaded, initializing...");
+            
+            // Step 1: Load label and color mappings first
+            await loadLabelMappings();
+            
+            // Step 2: Load image and detections
             await loadImages();
             
-            // Load features data and attention layers
+            // Step 3: Load features data and attention layers
             await loadFeaturesData();
             
             // Load attention visualization if available
@@ -542,23 +579,7 @@
                 // Store detection results for the attention visualization
                 if (data.detection_results) {
                     detection_results = data.detection_results;
-                    
-                    // Set up int_to_label mapping using actual class names from the backend
-                    // This is usually defined in the backend and we're recreating it here
-                    fetch('/api/label_mapping')
-                        .then(response => response.json())
-                        .then(data => {
-                            int_to_label = data.int_to_label || {};
-                        })
-                        .catch(error => {
-                            console.error('Error fetching label mapping:', error);
-                            // Create a fallback mapping if needed
-                            detection_results.labels.forEach(label => {
-                                if (!int_to_label[label]) {
-                                    int_to_label[label] = `Class ${label}`;
-                                }
-                            });
-                        });
+                    console.log("Received detection results with", detection_results.detectors.length, "detections");
                 }
                 
                 // Show the default images
@@ -676,76 +697,29 @@
         
         // Initialize the attention visualization component
         function initializeAttentionVisualization() {
-            // Set up variables for color mapping from Python
-            if (!int_to_label || Object.keys(int_to_label).length === 0) {
-                int_to_label = {};
-                int_to_color = {};
-                det_to_color = {};
+            console.log("Initializing attention visualization");
             
-                // First try to fetch label and color mappings from backend API
-                fetch('/api/label_mapping')
-                    .then(response => response.json())
-                    .then(data => {
-                        // Convert color arrays back from strings to numbers if needed
-                        int_to_label = data.int_to_label || {};
-                        
-                        // Convert string keys back to numbers for the color maps
-                        if (data.int_to_color) {
-                            Object.keys(data.int_to_color).forEach(key => {
-                                int_to_color[parseInt(key)] = data.int_to_color[key];
-                            });
-                        }
-                        
-                        if (data.det_to_color) {
-                            Object.keys(data.det_to_color).forEach(key => {
-                                det_to_color[parseInt(key)] = data.det_to_color[key];
-                            });
-                        }
-                        
-                        // Regenerate visualization with the new mappings
-                        generateQueryCircles();
-                    })
-                    .catch(error => {
-                        console.error('Error fetching label mapping:', error);
-                        // Use fallback random colors if API fails
-                        fallbackColorGeneration();
-                    });
+            // Make sure we have colors for all queries
+            if (Object.keys(det_to_color).length === 0) {
+                console.warn("Color mappings not loaded yet, generating fallback colors");
+                generateFallbackColors();
             }
             
-            // Fallback function to generate color mappings if API fails
-            function fallbackColorGeneration() {
-                // Generate color mappings based on detection_results
-                if (detection_results && detection_results.labels) {
-                    // Create label mappings
-                    detection_results.labels.forEach(label => {
-                        if (label !== undefined) {
-                            int_to_label[label] = `Class ${label}`;
-                            
-                            if (!int_to_color[label]) {
-                                int_to_color[label] = [
-                                    Math.floor(Math.random() * 200 + 55),
-                                    Math.floor(Math.random() * 200 + 55),
-                                    Math.floor(Math.random() * 200 + 55)
-                                ];
-                            }
-                        }
-                    });
-                    
-                    // Generate detector colors
-                    detection_results.detectors.forEach(detector => {
-                        if (!det_to_color[detector]) {
-                            det_to_color[detector] = [
-                                Math.floor(Math.random() * 200 + 55),
-                                Math.floor(Math.random() * 200 + 55),
-                                Math.floor(Math.random() * 200 + 55)
-                            ];
-                        }
-                    });
-                    
-                    // Regenerate visualization with fallback colors
-                    generateQueryCircles();
-                }
+            // Ensure detection queries have special colors
+            if (detection_results && detection_results.detectors) {
+                detection_results.detectors.forEach((detectorId, idx) => {
+                    // Set a special color for this detector if not already set
+                    if (!det_to_color[detectorId]) {
+                        det_to_color[detectorId] = [
+                            Math.floor(Math.random() * 155 + 100),
+                            Math.floor(Math.random() * 155 + 100),
+                            Math.floor(Math.random() * 155 + 100)
+                        ];
+                    }
+                });
             }
+            
+            console.log("Detector colors ready:", Object.keys(det_to_color).length);
             
             // Populate attention layer dropdown
             const layerSelect = document.getElementById('attention-layer-select');
@@ -808,13 +782,13 @@
                     interactiveCircle.className = 'query-circle interactive';
                     interactiveCircle.setAttribute('data-query-idx', detectorId);
                     
-                    // Style based on class label
+                    // Style based on detector ID (using det_to_color)
                     const size = '30px';
                     let color = '#cccccc'; // Default gray
                     
-                    // Use class-based coloring from int_to_color
-                    if (int_to_color[label] && Array.isArray(int_to_color[label])) {
-                        color = `rgb(${int_to_color[label][0]}, ${int_to_color[label][1]}, ${int_to_color[label][2]})`;
+                    // Use detector-based coloring from det_to_color
+                    if (det_to_color[detectorId] && Array.isArray(det_to_color[detectorId])) {
+                        color = `rgb(${det_to_color[detectorId][0]}, ${det_to_color[detectorId][1]}, ${det_to_color[detectorId][2]})`;
                     }
                     
                     interactiveCircle.style.width = size;
@@ -869,10 +843,10 @@
                     let color = '#cccccc'; // Default gray for non-detection queries
                     
                     if (detectionIndex !== -1) {
-                        // This is a detection query, color it by class
-                        const label = detection_results.labels[detectionIndex];
-                        if (int_to_color[label] && Array.isArray(int_to_color[label])) {
-                            color = `rgb(${int_to_color[label][0]}, ${int_to_color[label][1]}, ${int_to_color[label][2]})`;
+                        // This is a detection query, color it using det_to_color by detector ID
+                        const detectorId = detection_results.detectors[detectionIndex];
+                        if (det_to_color[detectorId] && Array.isArray(det_to_color[detectorId])) {
+                            color = `rgb(${det_to_color[detectorId][0]}, ${det_to_color[detectorId][1]}, ${det_to_color[detectorId][2]})`;
                         }
                     }
                     
