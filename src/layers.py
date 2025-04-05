@@ -3,7 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.ops import deform_conv2d
 
+import numpy as np
 from xformers.ops import memory_efficient_attention
+
+from functools import partial
+from src.torch_utils import autopad, inverse_sigmoid, get_clones
+
+import math
 
 @torch.no_grad()
 def build_self_and_memory_only_mask(n, m, device):
@@ -125,8 +131,10 @@ class Attention(nn.Module):
         v = torch.cat( ( v_mem, v ), dim = -2 ) # [ B H N C/H ] -> [ B H (N + N_mem) C/H ]
 
         # 4) Compute attention map
-        attn = q @ k.transpose( -1, -2 )
+        attn = q @ k.transpose( -1, -2 ) # [ B H N (N + N_mem) ]
         if not attn_bias is None:
+            if len( attn_bias.shape ) == 2:
+                attn_bias = attn_bias[None,None]
             attn = attn + attn_bias
 
         attn = attn.softmax( dim = -1 )
@@ -202,29 +210,6 @@ class MemEffAttention(Attention):
         x = self.proj_drop( self.proj( x ) )
 
         return ( x, None, {} )
-
-class Mlp(nn.Module):
-
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0, bias=True):
-        
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        
-        self.fc1 = nn.Linear( in_features, hidden_features, bias = bias )
-        self.act = act_layer()
-        self.fc2 = nn.Linear( hidden_features, out_features, bias = bias )
-        self.drop = nn.Dropout( drop )
-
-    def forward(self, x):
-
-        x = self.fc1( x )
-        x = self.act( x )
-        x = self.drop( x )
-        x = self.fc2( x )
-        x = self.drop( x )
-        
-        return x
 
 class LayerScale(nn.Module):
     
@@ -337,7 +322,7 @@ def drop_add_residual_stochastic_depth(x, residual_func, sample_drop_ratio=0.0):
     
     # Step 1: Get dimensions of the input tensor
     if type( x ) == tuple:
-        x, memory = x
+        x, memory, mask = x
     else: memory = None
 
     b, n, d = x.shape  # b: batch size, n: sequence length, d: feature dimension
@@ -353,7 +338,7 @@ def drop_add_residual_stochastic_depth(x, residual_func, sample_drop_ratio=0.0):
     # This produces a residual tensor for the retained samples
     if memory is not None:
         memory_subset = memory[brange]
-        residual, a, penalty = residual_func( x_subset, memory_subset )  # Shape: ( subset_size, n, d )
+        residual, a, penalty = residual_func( x_subset, memory_subset, mask )  # Shape: ( subset_size, n, d )
     else:
         residual, a, penalty = residual_func( x_subset )   # Shape: ( subset_size, n, d )
     
@@ -379,6 +364,143 @@ def drop_add_residual_stochastic_depth(x, residual_func, sample_drop_ratio=0.0):
 
     # Step 4: Reshape the updated tensor back to the original shape
     return x_plus_residual.view_as(x), a, penalty  # Shape: (b, n, d)
+
+class Conv(nn.Module):
+
+    def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=nn.SiLU(inplace=True), use_mask=False):
+
+        super().__init__()
+        self.conv = nn.Conv2d( c1, c2, k, s, autopad( k, p, d ), groups = g, dilation = d, bias = False )
+        self.bn = nn.BatchNorm2d( c2, eps = 0.001, momentum = 0.03, affine = True, track_running_stats = True )
+        if use_mask:
+            self.mask_token = nn.Parameter( torch.zeros( 1, c1 ) )
+        self.act = act
+
+    def forward(self, x, masks=None):
+
+        if not masks is None:
+            with torch.no_grad():
+                w = h = int( math.sqrt( masks.shape[1] ) )
+                msk = masks.view( masks.shape[0], 1, w, h ).float()
+                msk = F.interpolate( msk, size = x.shape[2:], mode = "bilinear", align_corners = False ).clamp( 0, 1 ).expand( -1, x.shape[1], -1, -1 ).bool()
+                msk = msk.permute( 0, 2, 3, 1 )
+            x = torch.where( msk, self.mask_token.to( x.dtype ).unsqueeze(0), x.permute( 0, 2, 3, 1 ) ) 
+            x = x.permute( 0, 3, 1, 2 )
+        return self.act( self.bn( self.conv( x ) ) )
+
+        # if not self.training:
+        #    return self.forward_fuse( x )
+
+    def forward_fuse(self, x):
+        return self.act( self.conv( x ) )
+
+class DWConv(Conv):
+    
+    def __init__(self, c1, c2, k=1, s=1, d=1, act=nn.Identity()):
+        super().__init__( c1, c2, k, s, g = math.gcd( c1, c2 ), d = d, act = act )
+
+class LightConv(nn.Module):
+
+    def __init__(self, c1, c2, k=1, act=nn.ReLU()):
+        super().__init__()
+        self.conv1 = Conv( c1, c2, 1, act = nn.Identity() )
+        self.conv2 = DWConv( c2, c2, k, act = act )
+
+    def forward(self, x):
+        return self.conv2( self.conv1( x ) )
+
+class RepConv(nn.Module):
+    
+    def __init__(self, c1, c2, k=3, s=1, p=1, g=1, act=nn.SiLU(inplace=True), bn=False):
+        
+        super().__init__()
+        assert k == 3 and p == 1
+        self.g = g
+        self.c1 = c1
+        self.c2 = c2
+        self.act = act
+
+        self.bn = nn.BatchNorm2d( num_features = c1 ) if bn and c2 == c1 and s == 1 else None
+        self.conv1 = Conv( c1, c2, k, s, p = p, g = g, act = torch.nn.Identity() )
+        self.conv2 = Conv( c1, c2, 1, s, p = ( p - k // 2), g = g, act = torch.nn.Identity() )
+
+    def forward_fuse(self, x):
+        self.fuse_convs()
+        return self.act( self.conv( x ) )
+
+    def forward(self, x):
+        # if not self.training:
+        #     return self.forward_fuse( x )
+        id_out = 0 if self.bn is None else self.bn( x )
+        return self.act( self.conv1( x ) + self.conv2( x ) + id_out )
+
+    def get_equivalent_kernel_bias(self):
+
+        kernel3x3, bias3x3 = self._fuse_bn_tensor( self.conv1 )
+        kernel1x1, bias1x1 = self._fuse_bn_tensor( self.conv2 )
+        kernelid, biasid = self._fuse_bn_tensor( self.bn )
+
+        return kernel3x3 + self._pad_1x1_to_3x3_tensor( kernel1x1 ) + kernelid, bias3x3 + bias1x1 + biasid
+
+    @staticmethod
+    def _pad_1x1_to_3x3_tensor(kernel1x1):
+        if kernel1x1 is None: return 0
+        else: return torch.nn.functional.pad( kernel1x1, [ 1, 1, 1, 1 ] )
+
+    def _fuse_bn_tensor(self, branch):
+        
+        if branch is None:
+            return 0, 0
+        if isinstance( branch, Conv ):
+            kernel = branch.conv.weight
+            running_mean = branch.bn.running_mean
+            running_var = branch.bn.running_var
+            gamma = branch.bn.weight
+            beta = branch.bn.bias
+            eps = branch.bn.eps
+        elif isinstance( branch, nn.BatchNorm2d ):
+            if not hasattr(self, "id_tensor"):
+                input_dim = self.c1 // self.g
+                kernel_value = np.zeros( ( self.c1, input_dim, 3, 3 ), dtype = np.float32 )
+                for i in range( self.c1 ):
+                    kernel_value[ i, i % input_dim, 1, 1 ] = 1
+                self.id_tensor = torch.from_numpy( kernel_value ).to( branch.weight.device )
+            kernel = self.id_tensor
+            running_mean = branch.running_mean
+            running_var = branch.running_var
+            gamma = branch.weight
+            beta = branch.bias
+            eps = branch.eps
+        std = ( running_var + eps ).sqrt()
+        t = ( gamma / std ).reshape(-1, 1, 1, 1)
+        return kernel * t, beta - running_mean * gamma / std
+
+    def fuse_convs(self):
+        """Fuse convolutions for inference by creating a single equivalent convolution."""
+        if hasattr( self, "conv" ): return
+        kernel, bias = self.get_equivalent_kernel_bias()
+        self.conv = nn.Conv2d(
+            in_channels = self.conv1.conv.in_channels,
+            out_channels = self.conv1.conv.out_channels,
+            kernel_size = self.conv1.conv.kernel_size,
+            stride = self.conv1.conv.stride,
+            padding = self.conv1.conv.padding,
+            dilation = self.conv1.conv.dilation,
+            groups = self.conv1.conv.groups,
+            bias = True,
+        ).requires_grad_( False )
+        self.conv.weight.data = kernel
+        self.conv.bias.data = bias
+        for para in self.parameters():
+            para.detach_()
+        self.__delattr__("conv1")
+        self.__delattr__("conv2")
+        if hasattr(self, "nm"):
+            self.__delattr__("nm")
+        if hasattr(self, "bn"):
+            self.__delattr__("bn")
+        if hasattr(self, "id_tensor"):
+            self.__delattr__("id_tensor")
 
 class DeformableConv2d(nn.Module):
 
@@ -407,45 +529,134 @@ class DeformableConv2d(nn.Module):
         return deform_conv2d( input = x, offset = offset, weight = self.weight,
                               bias = self.bias, padding = 1, mask = mask )
 
-def _build_mlp(nlayers, in_dim, bottleneck_dim, hidden_dim=None, use_bn=False, bias=True):
+class Concat(nn.Module):
     
-    if nlayers == 1:
-        return nn.Linear( in_dim, bottleneck_dim, bias = bias )
+    def __init__(self, dimension=1):
     
-    else:
-        layers = [ nn.Linear( in_dim, hidden_dim, bias = bias ) ]
-        if use_bn:
-            layers.append( nn.BatchNorm1d( hidden_dim ) )
-        layers.append( nn.GELU() )
-        for _ in range( nlayers - 2 ):
-            layers.append( nn.Linear( hidden_dim, hidden_dim, bias = bias ) )
-            if use_bn:
-                layers.append( nn.BatchNorm1d( hidden_dim ) )
-            layers.append( nn.GELU() )
-        layers.append( nn.Linear( hidden_dim, bottleneck_dim, bias = bias ) )
-        
-        return nn.Sequential( *layers )
-    
-class DepthwiseConv(nn.Module):
-    
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
-
-        super( DepthwiseConv, self ).__init__()
-
-        self.layer = nn.Sequential(
-            nn.Conv2d(
-                in_channels, 
-                in_channels, 
-                kernel_size = kernel_size, 
-                stride = stride, 
-                padding = padding, 
-                groups = in_channels
-            ), # Depthwise convolution
-            nn.ReLU( inplace = True ),
-            nn.Conv2d( in_channels, out_channels, kernel_size = 1 ), # Pointwise convolution
-            nn.ReLU( inplace = True )
-        )
+        super().__init__()
+        self.d = dimension
 
     def forward(self, x):
-        x = self.layer( x )
-        return x
+    
+        return torch.cat( x, self.d )
+
+class MLP(nn.Module):
+    
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act=nn.ReLU, sigmoid=False, drop=0.0, bias=True):
+    
+        super().__init__()
+        self.num_layers = num_layers
+        h = [hidden_dim] * ( num_layers - 1 )
+        self.layers = nn.ModuleList( nn.Linear( n, k, bias = bias ) for n, k in zip( [ input_dim ] + h, h + [ output_dim ] ) )
+        self.sigmoid = sigmoid
+        self.act = act()
+        self.drop = drop
+
+    def forward(self, x):
+        for i, layer in enumerate( self.layers ):
+            x = getattr( self, "act", nn.ReLU() )( layer( x ) )  if i < self.num_layers - 1 else layer( x )
+            if self.drop > 0.0 and i < self.num_layers - 1:
+                x = F.dropout( x, p = self.drop, training = self.training )
+        return x.sigmoid() if getattr( self, "sigmoid", False ) else x
+
+class SequentialGraph(nn.Module):
+    
+    def __init__(self, *args, layers_return=None, graph=None, grads=[]):
+        
+        super( SequentialGraph, self ).__init__()
+        self.layers = nn.ModuleList( args )
+        self.layers_return = layers_return
+        self.graph = graph if graph is not None else {}
+
+        # Precompute which layers' outputs must be stored.
+        # Only store outputs that are used in an exception connection (and not already the main flow)
+        # or are explicitly requested as a return.
+        self.store_set = set()
+        for consumer, entry in self.graph.items():
+            src = entry.get( 'input', None )
+            if src is None:
+                continue
+            if isinstance( src, list ):
+                for s in src:
+                    if s != consumer - 1:
+                        self.store_set.add( s )
+            else:
+                if src != consumer - 1:
+                    self.store_set.add( src )
+        
+        # Also, if returns is specified and isn't the final layer, store that output.
+        if self.layers_return is not None:
+            if isinstance( self.layers_return, list ):
+                for r in self.layers_return:
+                    if r != len( self.layers ) - 1:
+                        self.store_set.add( r )
+            else:
+                if self.layers_return != len( self.layers ) - 1:
+                    self.store_set.add( self.layers_return )
+
+        if len( grads ) > 0:
+            for i, l in enumerate( self.layers ):
+                if i not in grads:
+                    # This layer's output is not needed for gradient computation.
+                    for param in l.parameters():
+                        param.requires_grad = False
+                else:
+                    # This layer's output is needed for gradient computation.
+                    for param in l.parameters():
+                        param.requires_grad = True
+        else:
+            # No layers are excluded from gradient computation.
+            for l in self.layers:
+                for param in l.parameters():
+                    param.requires_grad = True
+
+    def forward(self, x, additional):
+        num_layers = len(self.layers)
+        stored = [None] * num_layers  # Preallocate a list for stored outputs
+        current = x
+
+        # Cache graph and store_set locally
+        graph = self.graph
+        store_set = self.store_set
+
+        for i, layer in enumerate( self.layers ):
+            entry = graph.get( i, None )
+            if entry is not None:
+                rt = entry.get( 'return', None )
+                src = entry.get( 'input', None )
+                add = entry.get( 'additional', None )
+
+                # Determine input
+                if src is not None:
+                    if isinstance( src, list ):
+                        inp = [ current if s == i - 1 else stored[s] for s in src ]
+                    else:
+                        inp = current if src == i - 1 else stored[src]
+                else:
+                    inp = current
+
+                # Directly pass additional arguments instead of creating a partial
+                if add is not None:
+                    current = layer( inp, **{ k: additional[k] for k in add } )
+                else:
+                    current = layer( inp )
+
+                if rt is not None:
+                    if isinstance( rt, list ):
+                        current = [ current[r] for r in rt ]
+                    else:
+                        current = current[rt]
+            else:
+                current = layer(current)
+
+            if i in store_set:
+                stored[i] = current
+
+        # Return the requested outputs
+        if self.layers_return is None:
+            return current
+        if isinstance(self.layers_return, list):
+            return [current if r == num_layers - 1 else stored[r] for r in self.layers_return]
+        else:
+            return current if self.layers_return == num_layers - 1 else stored[self.layers_return]
+

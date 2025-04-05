@@ -1,10 +1,8 @@
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
-from PIL import Image
 import os
 from torch.utils.data import Sampler
-from sklearn.cluster import KMeans
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets.vision import VisionDataset
@@ -23,6 +21,7 @@ import os
 import random
 import torch
 import cv2
+from torchvision.ops import nms
 
 class Decoder:
     def decode(self):
@@ -250,13 +249,13 @@ class DataAugmentation(object):
                             brightness = 0.4, contrast = 0.4, saturation = 0.2, hue = 0.1
                         )
                     ],
-                    p = 0.8,
+                    p = 0.4,
                 ),
                 transforms.RandomGrayscale( p = 0.2 ),
             ]
         )
 
-        global_transfo1_extra = GaussianBlur( p = 1.0 )
+        global_transfo1_extra = GaussianBlur( p = 0.5 )
 
         global_transfo2_extra = transforms.Compose(
             [
@@ -264,8 +263,11 @@ class DataAugmentation(object):
             ]
         )
 
-        self.global_transfo1 = transforms.Compose( [ color_jittering, global_transfo1_extra, make_normalize_transform() ] )
-        self.global_transfo2 = transforms.Compose( [ color_jittering, global_transfo2_extra, make_normalize_transform() ] )
+        # self.global_transfo1 = transforms.Compose( [ color_jittering, global_transfo1_extra, make_normalize_transform() ] )
+        # self.global_transfo2 = transforms.Compose( [ color_jittering, global_transfo2_extra, make_normalize_transform() ] )
+
+        self.global_transfo1 = transforms.Compose( [ color_jittering, global_transfo1_extra ] )
+        self.global_transfo2 = transforms.Compose( [ color_jittering, global_transfo2_extra ] )
 
         # self.global_transfo1 = transforms.Compose( [ make_normalize_transform() ] )
         # self.global_transfo2 = transforms.Compose( [ make_normalize_transform() ] )
@@ -526,12 +528,12 @@ def build_data_loader(root, batch_size, global_crops_size=512, random=True):
             batch_size = batch_size,
             sampler = sampler,
             collate_fn = collate_fn,
-            num_workers = 8, # High number of workers since CPU is not maxed
-            persistent_workers = True,  # Keep workers alive
-            pin_memory = True, # Faster CPU → GPU transfers
-            prefetch_factor = 4, # Load more batches in advance
-            timeout = 60,  # Prevent workers from resetting if disk is slow
-            drop_last = True  # Avoid uneven batch issues
+            # num_workers = 8, # High number of workers since CPU is not maxed
+            # persistent_workers = True,  # Keep workers alive
+            # pin_memory = True, # Faster CPU → GPU transfers
+            # prefetch_factor = 4, # Load more batches in advance
+            # timeout = 60,  # Prevent workers from resetting if disk is slow
+            # drop_last = True  # Avoid uneven batch issues
         )
     else:
         loader = DataLoader(
@@ -734,134 +736,58 @@ def parse_seg_annotation_line_for_crop(line, image_width, image_height, crop_box
     normalized_coords = [ ( x / crop_width, y / crop_height ) for x, y in shifted_coords ]
     new_polygon_np = np.array( [ normalized_coords ], dtype = np.float32 )
 
-    # === Create masks ===
-    masks = {}
-    for res in mask_shapes:
+    # # === Create masks ===
+    # masks = {}
+    # for res in mask_shapes:
 
-        mask = np.zeros( ( res, res ), dtype = np.int32 )
-        cell_w = crop_width / res
-        cell_h = crop_height / res
+    #     mask = np.zeros( ( res, res ), dtype = np.int32 )
+    #     cell_w = crop_width / res
+    #     cell_h = crop_height / res
 
-        for row in range( res ):
-            for col in range( res ):
-                cell_x1 = col * cell_w
-                cell_y1 = row * cell_h
-                cell_x2 = cell_x1 + cell_w
-                cell_y2 = cell_y1 + cell_h
-                cell_box = box( cell_x1, cell_y1, cell_x2, cell_y2 )
+    #     for row in range( res ):
+    #         for col in range( res ):
+    #             cell_x1 = col * cell_w
+    #             cell_y1 = row * cell_h
+    #             cell_x2 = cell_x1 + cell_w
+    #             cell_y2 = cell_y1 + cell_h
+    #             cell_box = box( cell_x1, cell_y1, cell_x2, cell_y2 )
 
-                if new_poly.intersects( cell_box ):
-                    mask[row, col] += 1
-        masks[res] = mask
+    #             if new_poly.intersects( cell_box ):
+    #                 mask[row, col] += 1
+    #     masks[res] = mask
         
-    return label, new_bbox, new_polygon_np, masks
+    return label, new_bbox, new_polygon_np#, masks
 
 def parse_annotation_line_for_crop_bbox(line, image_width, image_height, crop_box, area_thresh=0.5, max_points=None, mask_shapes=[]):
-   
+    
     # Split the annotation line and verify format.
     parts = line.strip().split()
     if len(parts) != 5:
-        raise ValueError("Annotation line must have exactly 5 values: label, left, ytop, w, h")
+        raise ValueError("Annotation line must have exactly 5 values: label, center_x, center_y, w, h")
     
     # Parse label and bounding box (normalized).
-    label = int(parts[0])
-    left_norm = float(parts[1])
-    ytop_norm = float(parts[2])
-    w_norm = float(parts[3])
-    h_norm = float(parts[4])
-    
-    # Denormalize to full image pixel coordinates.
-    x_left = left_norm * image_width
-    y_top = ytop_norm * image_height
-    bbox_width = w_norm * image_width
-    bbox_height = h_norm * image_height
-    
-    # Create polygon from bounding box (rectangle).
-    polygon_points = [
-        (x_left, y_top),
-        (x_left + bbox_width, y_top),
-        (x_left + bbox_width, y_top + bbox_height),
-        (x_left, y_top + bbox_height)
-    ]
-    poly_full = Polygon(polygon_points)
-    if not poly_full.is_valid:
-        poly_full = poly_full.buffer(0)
-    
-    # Define crop region.
-    x_offset, y_offset, crop_width, crop_height = crop_box
-    crop_poly = box(x_offset, y_offset, x_offset + crop_width, y_offset + crop_height)
-    
-    # Compute intersection of the full polygon with the crop.
-    poly_crop = poly_full.intersection(crop_poly)
-    if poly_crop.is_empty:
-        return None  # No overlap.
-    
-    # If the intersection results in a GeometryCollection or MultiPolygon, choose the largest polygon.
-    if poly_crop.geom_type == "GeometryCollection":
-        poly_candidates = [geom for geom in poly_crop.geoms if geom.geom_type in ["Polygon", "MultiPolygon"]]
-        if not poly_candidates:
-            return None
-        flattened = []
-        for geom in poly_candidates:
-            if geom.geom_type == "MultiPolygon":
-                flattened.extend(list(geom.geoms))
-            else:
-                flattened.append(geom)
-        poly_crop = max(flattened, key=lambda p: p.area)
-    elif poly_crop.geom_type == "MultiPolygon":
-        poly_crop = max(poly_crop.geoms, key=lambda p: p.area)
-    
-    # Check if the intersection area is sufficient.
-    if poly_full.area > 0 and (poly_crop.area / poly_full.area) < area_thresh:
-        return None
-    
-    # (Optional) Simplify the polygon if max_points is provided.
-    if max_points is not None:
-        # You can integrate your own polygon simplification function here.
-        poly_crop = simplify_polygon_to_max_points(poly_crop, max_points)
-    
-    # Shift polygon coordinates to be relative to the crop.
-    shifted_coords = []
-    for x, y in np.array(poly_crop.exterior.coords):
-        shifted_coords.append((x - x_offset, y - y_offset))
-    new_poly = Polygon(shifted_coords)
-    if new_poly.is_empty:
-        return None
+    label = int( parts[0] )
+    center_x_norm = float( parts[1] )
+    center_y_norm = float( parts[2] )
+    w_norm = float( parts[3] )
+    h_norm = float( parts[4] )
+
+    # Just create the poligon from the bounding box.
+    half_w = w_norm / 2.0
+    half_h = h_norm / 2.0
+    top_left = ( center_x_norm - half_w, center_y_norm - half_h )
+    top_right = ( center_x_norm + half_w, center_y_norm - half_h )
+    bottom_right = ( center_x_norm + half_w, center_y_norm + half_h )
+    bottom_left = ( center_x_norm - half_w, center_y_norm + half_h )
     
     # Compute the bounding box of the shifted polygon.
-    minx, miny, maxx, maxy = new_poly.bounds
-    new_width = max(maxx - minx, 1)
-    new_height = max(maxy - miny, 1)
-    new_bbox = (minx / crop_width, miny / crop_height, new_width / crop_width, new_height / crop_height)
-    new_bbox = convert_to_cxcywh(new_bbox)  # Convert to center x, center y, width, height
+    new_bbox = ( center_x_norm, center_y_norm, w_norm, h_norm )    
+    normalized_coords = [ top_left, top_right, bottom_right, bottom_left, top_left ]
+    new_polygon_np = np.array( [ normalized_coords ], dtype = np.float32 )    
     
-    # Normalize polygon coordinates relative to the crop.
-    normalized_coords = [(x / crop_width, y / crop_height) for x, y in shifted_coords]
-    new_polygon_np = np.array([normalized_coords], dtype=np.float32)
-    
-    # === Create masks if requested ===
-    masks = {}
-    for res in mask_shapes:
-        mask = np.zeros((res, res), dtype=np.int32)
-        cell_w = crop_width / res
-        cell_h = crop_height / res
-        for row in range(res):
-            for col in range(res):
-                cell_x1 = col * cell_w
-                cell_y1 = row * cell_h
-                cell_box = box(cell_x1, cell_y1, cell_x1 + cell_w, cell_y1 + cell_h)
-                if new_poly.intersects(cell_box):
-                    mask[row, col] = 1
-        masks[res] = mask
-    
-    return label, new_bbox, new_polygon_np, masks
+    return label, new_bbox, new_polygon_np  # masks
 
-def merge_feature_maps(
-        crop_boxes: torch.Tensor, 
-        crop_features: torch.Tensor, 
-        crop_size: int, 
-        image_size: tuple, 
-        fm_size: int) -> torch.Tensor:
+def merge_feature_maps( crop_boxes, crop_features, crop_size, image_size, fm_size):
     """
     Merge crop feature maps into a full feature map using torch.
     Overlapping regions are averaged.
@@ -900,13 +826,13 @@ def merge_feature_maps(
     weight = torch.zeros( ( full_height, full_width ), dtype = dtype, device = device )
     
     # Iterate over each crop.
-    for i in range( crop_boxes.shape[0] ):
+    for i in range( len( crop_boxes ) ):
 
         # Retrieve crop box coordinates.
         left, upper, right, lower = crop_boxes[i]
         # Map the crop's top-left coordinates into full feature map space.
-        dest_left = int( round( left.item() * factor ) )
-        dest_top  = int( round( upper.item() * factor ) )
+        dest_left = int( round( left * factor ) )
+        dest_top  = int( round( upper * factor ) )
         # The region covered in the full feature map is fm_size x fm_size.
         dest_right = dest_left + fm_size
         dest_bottom = dest_top + fm_size
@@ -994,8 +920,6 @@ class TrainObjectsSegDataset(Dataset):
         
         # Load the image.
         image = decode( sample_path, "" ) # tensor
-        # Resize the image from 1280x720 about 30%
-        # image = torch.nn.functional.interpolate( image.unsqueeze(0), scale_factor = 0.8, mode = 'bilinear', align_corners = False ).squeeze(0)
         _, orig_h, orig_w = image.shape
 
         # Random crop of size 512x512.
@@ -1014,32 +938,26 @@ class TrainObjectsSegDataset(Dataset):
         for line in lines:
             try:
                 parsed = parse_seg_annotation_line_for_crop( line, 
-                                                         orig_w, orig_h, 
-                                                         crop_box, 
-                                                         area_thresh = 0.1, 
-                                                         max_points = self.max_poly_points - 1,
-                                                         mask_shapes = [ 64, 32, 16 ] )
+                                                             orig_w, orig_h, 
+                                                             crop_box, 
+                                                             area_thresh = 0.1, 
+                                                             max_points = self.max_poly_points - 1,
+                                                             mask_shapes = [ 64, 32, 16 ] )
                 if parsed is not None:
-                    label, bbox, polygon_np, masks = parsed
+                    label, bbox, polygon_np = parsed
                     annotations.append({
-                        "label": label + 1,
+                        "label": label,
                         "bbox": bbox,           # normalized bbox relative to crop
                         "polygon": polygon_np,   # polygon coordinates relative to crop
-                        "localization_mask": masks
                     })
             except:
                 pass
             
         if len( annotations ) == 0:
             annotations.append({
-                "label": 0,
+                "label": 24,
                 "bbox": ( 0, 0, 0, 0 ),
                 "polygon": np.zeros( ( 1, self.max_poly_points, 2 ), dtype = np.float32 ),
-                "localization_mask": {
-                    64: np.zeros( ( 64, 64 ), dtype = np.int32 ),
-                    32: np.zeros( ( 32, 32 ), dtype = np.int32 ),
-                    16: np.zeros( ( 16, 16 ), dtype = np.int32 )
-                }
             })
                 
         return img_cropped, annotations
@@ -1123,6 +1041,7 @@ class TrainObjectsDetectDataset(Dataset):
         
         # Load the image.
         image = decode( sample_path, "" ) # tensor
+        image = F.resize( image, ( 640, 640 ) )
         _, orig_h, orig_w = image.shape
 
         # Random crop of size 512x512.
@@ -1147,14 +1066,14 @@ class TrainObjectsDetectDataset(Dataset):
                                                               max_points = self.max_poly_points - 1,
                                                               mask_shapes = [ 64, 32, 16 ] )
                 if parsed is not None:
-                    label, bbox, polygon_np, masks = parsed
+                    label, bbox, polygon_np = parsed
                     if label > len(self.classes) -2:
                         continue
                     annotations.append({
                         "label": label + 1,
                         "bbox": bbox,           # normalized bbox relative to crop
                         "polygon": polygon_np,   # polygon coordinates relative to crop
-                        "localization_mask": masks
+                        # "localization_mask": masks
                     })
             except:
                 pass
@@ -1163,17 +1082,18 @@ class TrainObjectsDetectDataset(Dataset):
             annotations.append({
                 "label": 0,
                 "bbox": ( 0, 0, 0, 0 ),
-                "polygon": np.zeros( ( 1, self.max_poly_points, 2 ), dtype = np.float32 ),
-                "localization_mask": {
-                    64: np.zeros( ( 64, 64 ), dtype = np.int32 ),
-                    32: np.zeros( ( 32, 32 ), dtype = np.int32 ),
-                    16: np.zeros( ( 16, 16 ), dtype = np.int32 )
-                }
+                "polygon": np.zeros( ( 1, 5, 2 ), dtype = np.float32 ),
+                # "localization_mask": {
+                #     64: np.zeros( ( 64, 64 ), dtype = np.int32 ),
+                #     32: np.zeros( ( 32, 32 ), dtype = np.int32 ),
+                #     16: np.zeros( ( 16, 16 ), dtype = np.int32 )
+                # }
             })
                 
-        return img_cropped[[ 2, 1, 0 ], :, :], annotations
+        return img_cropped, annotations
 
     def check_bad_images(self):
+
         for idx in range( len( self ) ):
             self.__getitem__( idx )
         
@@ -1202,16 +1122,13 @@ def filter_mask_by_size(mask, area_range):
     
     return filtered_mask.astype(np.float32)
 
-def collate_train_detection_data_and_cast(samples_list, max_objects, max_polygon_points):
+def collate_train_detection_data_and_cast(samples_list, mask_generator, mask_ratio_tuple, mask_probability, max_polygon_points):
 
     # Initialize lists for image and target data.
     images = []
     bounding_boxes = []
     polygons = []
     labels = []
-    localization_masks1 = []
-    localization_masks2 = []
-    localization_masks3 = []
     max_num_objects = np.max( [ len( sample[1] ) for sample in samples_list ] )
     # Iterate over the samples and extract image and target data.
     for sample in samples_list:
@@ -1221,29 +1138,23 @@ def collate_train_detection_data_and_cast(samples_list, max_objects, max_polygon
         bounding_boxes_ = []
         polygons_ = []
         labels_ = []
-        localization_masks1_ = []
-        localization_masks2_ = []
-        localization_masks3_ = []
         # Extract target data.
         for target in targets:
 
             label = target["label"]
             bbox = target["bbox"]
             polygon = target["polygon"]
-            localization_mask = target["localization_mask"]
+            # localization_mask = target["localization_mask"]
 
             # Append target data to lists.
             labels_.append( label )
             bounding_boxes_.append( bbox )
             polygons_.append( polygon )
-            localization_masks1_.append( filter_mask_by_size( localization_mask[64], ( 1, 512 ) ) ) # 1 - 512
-            localization_masks2_.append( filter_mask_by_size( localization_mask[32], ( 128, 256 ) ) ) # 512 - 1024 (128 - 256)
-            localization_masks3_.append( filter_mask_by_size( localization_mask[16], ( 64, float('inf') ) ) ) # 1024 - inf (64 - inf)
 
         if len( targets ) < max_num_objects:
             # Pad with zeros.
             num_pad = max_num_objects - len( targets )
-            labels_.extend( [ 0 ] * num_pad )
+            labels_.extend( [ 24 ] * num_pad )
             bounding_boxes_.extend( [ ( 0, 0, 0, 0 ) ] * num_pad )
             polygons_.extend( [ np.zeros( ( 1, max_polygon_points, 2 ), dtype = np.float32 ) ] * num_pad )
 
@@ -1251,33 +1162,39 @@ def collate_train_detection_data_and_cast(samples_list, max_objects, max_polygon
         bounding_boxes.append( bounding_boxes_ )
         polygons.append( np.concatenate( polygons_ ) )
 
-        l1 = np.stack( localization_masks1_ ).sum( 0 ).clip( 0, 1 ) # only for small objects (64x64 mask)
-        l2 = np.stack( localization_masks2_ ).sum( 0 ).clip( 0, 1 ) # only for medium objects (32x32 mask)
-        l3 = np.stack( localization_masks3_ ).sum( 0 ).clip( 0, 1 ) # only for large objects (16x16 mask)
-
-        localization_masks1.append( l1 )
-        localization_masks2.append( l2 )
-        localization_masks3.append( l3 )
-        
     labels = np.array( labels, dtype = np.int32 )
     bounding_boxes = np.array( bounding_boxes, dtype = np.float32 )
     polygons = np.array( polygons, dtype = np.float32 )
-    localization_masks1 = np.array( localization_masks1, dtype = np.float32 )
-    localization_masks2 = np.array( localization_masks2, dtype = np.float32 )
-    localization_masks3 = np.array( localization_masks3, dtype = np.float32 )
     
     # Stack the lists to form tensors.
     images = torch.stack( images )
     labels = torch.tensor( labels, dtype = torch.long )
     bounding_boxes = torch.tensor( bounding_boxes, dtype = torch.float32 )
     polygons = torch.tensor( polygons, dtype = torch.float32 )
-    localization_masks1 = torch.tensor( localization_masks1, dtype = torch.float32 )
-    localization_masks2 = torch.tensor( localization_masks2, dtype = torch.float32 )
-    localization_masks3 = torch.tensor( localization_masks3, dtype = torch.float32 )
 
-    return images, labels, bounding_boxes, polygons, ( localization_masks1, localization_masks2, localization_masks3 )
+    B = len( images ) # Batch size
+    N = 20*20
+    n_samples_masked = int( B * mask_probability ) # Number of samples to be masked
+    probs = torch.linspace( *mask_ratio_tuple, n_samples_masked + 1 ) # Linearly spaced probabilities
+    upperbound = 0
+    masks = [ ]
+    for i in range(0, n_samples_masked):
+        prob_min = probs[i]
+        prob_max = probs[i + 1]
+        masks.append( torch.BoolTensor( mask_generator( int( N * random.uniform( prob_min, prob_max ) ) ) ) )
+        upperbound += int( N * prob_max )
+    for i in range( n_samples_masked, B ):
+        masks.append( torch.BoolTensor( mask_generator(0) ) ) # No masking
+
+    random.shuffle( masks )
+    masks = torch.stack( masks ).flatten(1) # [ B, N ]
+    indices = masks.flatten().nonzero().flatten() # [ B*N ]
+    n_masked_patches = torch.full( (1,), fill_value = indices.shape[0], dtype = torch.long )
+    masks_weight = ( 1 / masks.sum( -1 ).clamp( min = 1.0 ) ).unsqueeze(-1).expand_as( masks )[masks]
+
+    return [ images, labels, bounding_boxes, polygons, ( masks, indices, n_masked_patches, masks_weight ) ]
     
-def build_data_loader_train_detection(root, batch_size, max_objects, max_poly_points, crop_size, mode = 'detect', random=True):
+def build_data_loader_train_detection(root, batch_size, max_objects, max_poly_points, crop_size, mode = 'detect', random=True, train=True):
 
     color_jittering = transforms.Compose(
         [
@@ -1293,19 +1210,23 @@ def build_data_loader_train_detection(root, batch_size, max_objects, max_poly_po
             GaussianBlur( p = 1.0 )
         ]
     )
-    transform_color = transforms.Compose( [ color_jittering, make_normalize_transform() ] )
+    transform_color = transforms.Compose( [ color_jittering ] )
+    # transform_color = transforms.Compose( [ color_jittering, make_normalize_transform() ] )
     # transform_color = transforms.Compose( [ make_normalize_transform() ] )
 
     if mode == 'detect':
-        dataset = TrainObjectsDetectDataset( folder = root, transform = transform_color, max_poly_points = max_poly_points, crop_size = crop_size )
+        dataset = TrainObjectsDetectDataset( folder = root, transform = transform_color, max_poly_points = max_poly_points, crop_size = crop_size, mode = 'train' if train else 'val' )
     elif mode == 'seg':
-        dataset = TrainObjectsSegDataset( folder = root, transform = transform_color, max_poly_points = max_poly_points, crop_size = crop_size )
+        dataset = TrainObjectsSegDataset( folder = root, transform = transform_color, max_poly_points = max_poly_points, crop_size = crop_size, mode = 'train' if train else 'val' )
     
     # dataset.check_bad_images()
+    mask_generator = MaskingGenerator( 20, num_masking_patches = 20*20 )
 
     collate_fn = partial(
         collate_train_detection_data_and_cast,
-        max_objects = max_objects,
+        mask_generator = mask_generator,
+        mask_ratio_tuple = ( 0.15, 0.5 ),
+        mask_probability = 0.5,
         max_polygon_points = max_poly_points
     )
 
@@ -1320,7 +1241,7 @@ def build_data_loader_train_detection(root, batch_size, max_objects, max_poly_po
             num_workers = 8, # High number of workers since CPU is not maxed
             persistent_workers = True,  # Keep workers alive
             pin_memory = True, # Faster CPU → GPU transfers
-            prefetch_factor = 4, # Load more batches in advance
+            prefetch_factor = 6, # Load more batches in advance
             timeout = 60,  # Prevent workers from resetting if disk is slow
             drop_last = True  # Avoid uneven batch issues
         )
@@ -1342,50 +1263,46 @@ def build_data_loader_train_detection(root, batch_size, max_objects, max_poly_po
 
     return loader
 
-def extract_overlapping_crops_and_boxes(image: torch.Tensor, crop_size: int):
+def extract_overlapping_crops_and_boxes(image: torch.Tensor, crop_size: int, stride: int):
     """
-    Extract overlapping SxS crops that cover the entire image tensor and return the crop boxes.
-    
+    Extract SxS crops from the image using a fixed stride, allowing control over overlap,
+    and return the crop boxes.
+
     Parameters:
         image (torch.Tensor): The input image tensor of shape (C, H, W).
         crop_size (int): The side length S for the SxS crops.
-    
+        stride (int): The number of pixels to move for each crop. A value less than crop_size
+                      results in overlapping crops.
+
     Returns:
         tuple: Two lists:
-            - crops: a list of torch.Tensor crops sorted from top left to bottom right.
+            - crops: a list of torch.Tensor crops sorted from top-left to bottom-right.
             - boxes: a list of tuples (left, upper, right, lower) for each crop.
     """
-    # Get dimensions from the image tensor (assumed shape: (C, H, W))
     _, height, width = image.shape
     crops = []
     boxes = []
 
-    # Calculate the number of crops required in each dimension.
-    n_cols = max(1, math.ceil((width - crop_size) / crop_size) + 1)
-    n_rows = max(1, math.ceil((height - crop_size) / crop_size) + 1)
-    
-    # Compute the stride between consecutive crops.
-    x_stride = (width - crop_size) / (n_cols - 1) if n_cols > 1 else 0
-    y_stride = (height - crop_size) / (n_rows - 1) if n_rows > 1 else 0
+    # Determine start positions along width and height.
+    if width <= crop_size:
+        left_positions = [0]
+    else:
+        left_positions = list(range(0, width - crop_size + 1, stride))
+        if left_positions[-1] != width - crop_size:
+            left_positions.append(width - crop_size)
 
-    # Loop over rows and columns to extract each crop.
-    for row in range(n_rows):
-        for col in range(n_cols):
-            # Calculate the top-left corner of the crop.
-            left = int(round(col * x_stride))
-            upper = int(round(row * y_stride))
+    if height <= crop_size:
+        upper_positions = [0]
+    else:
+        upper_positions = list(range(0, height - crop_size + 1, stride))
+        if upper_positions[-1] != height - crop_size:
+            upper_positions.append(height - crop_size)
+
+    # Loop over the positions and extract crops.
+    for upper in upper_positions:
+        for left in left_positions:
             right = left + crop_size
             lower = upper + crop_size
-
-            # Adjust if the crop goes beyond the image borders.
-            if right > width:
-                right = width
-                left = width - crop_size
-            if lower > height:
-                lower = height
-                upper = height - crop_size
-
-            # Extract the crop using tensor slicing (and clone to ensure independence).
             crop = image[:, upper:lower, left:right].clone()
             crops.append(crop)
             boxes.append((left, upper, right, lower))
@@ -1509,11 +1426,14 @@ def draw(data, pred_boxes=None, grid_cols=4):
     to_pil = ToPILImage()
     to_tensor = ToTensor()
 
+    if data[3] is None:
+        data[3] = data[2]
     drawn_images = []
     size = len( data[0] )
     for i in range( size ):
 
-        img = denormalize_transform( data[0][i] )
+        # img = denormalize_transform( data[0][i] )
+        img = data[0][i]
         labels = data[1][i]
         bounding_boxes = data[2][i]
         polygons = data[3][i]
@@ -1534,7 +1454,7 @@ def draw(data, pred_boxes=None, grid_cols=4):
             if label == 0:
                 continue
             
-            unormalized_coords = np.array( [ ( x * crop_w, y * crop_h ) for x, y in polygon ] )
+            # unormalized_coords = np.array( [ ( x * crop_w, y * crop_h ) for x, y in polygon ] )
 
             # Convert normalized bbox to absolute coordinates.
             x_center, y_center, width, height = bbox
@@ -1556,11 +1476,11 @@ def draw(data, pred_boxes=None, grid_cols=4):
 
                 draw.rectangle( [ x_min, y_min, x_max, y_max ], outline = "green", width = 2 )
                         
-            # Draw polygon if available.
-            if unormalized_coords is not None and unormalized_coords.shape[0] >= 3:
-                # polygon_np is expected in OpenCV format: shape [1, num_points, 2].
-                poly_points = [ tuple(pt) for pt in unormalized_coords ]
-                draw.line( poly_points + [ poly_points[0] ], fill = "blue", width = 2 )
+            # # Draw polygon if available.
+            # if unormalized_coords is not None and unormalized_coords.shape[0] >= 3:
+            #     # polygon_np is expected in OpenCV format: shape [1, num_points, 2].
+            #     poly_points = [ tuple(pt) for pt in unormalized_coords ]
+            #     draw.line( poly_points + [ poly_points[0] ], fill = "blue", width = 2 )
 
         # Append the drawn image.
         drawn_images.append(to_tensor(img))
@@ -1569,3 +1489,20 @@ def draw(data, pred_boxes=None, grid_cols=4):
     grid = make_grid( drawn_images, nrow = grid_cols, padding = 4 )
     
     return grid
+
+def nms_torch(bboxes, scores, iou_threshold=0.5):
+    
+    # Convert (c_x, c_y, w, h) to (x1, y1, x2, y2)
+    half_w = bboxes[:, 2] / 2.0
+    half_h = bboxes[:, 3] / 2.0
+    x1 = bboxes[:, 0] - half_w
+    y1 = bboxes[:, 1] - half_h
+    x2 = bboxes[:, 0] + half_w
+    y2 = bboxes[:, 1] + half_h
+
+    # Stack them into a [num_detections, 4] tensor
+    boxes_xyxy = torch.stack( [ x1, y1, x2, y2 ], dim = 1 )
+
+    # Apply torchvision NMS
+    keep_indices = nms( boxes_xyxy, scores, iou_threshold )
+    return keep_indices

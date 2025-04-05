@@ -3,12 +3,16 @@ from torch import nn
 import torch.nn.functional as F
 from torch.amp import GradScaler
 
-from torch_tools import Module
-from layers import VisionEncoder, PredictorHead, Backbone, TransformerDetection, ProposalHead
-from losses import DINOLoss, iBOTPatchLoss, KoLeoLoss, VicRegLoss, HungarianLossComputation, FocalLoss, normalized_l1_loss, bbox_iou, compute_bbox_classification_loss
+from src.torch_tools import Module
+from src.modules import Encoder, PredictorHead, TransformerDetection, RTDETRDecoder
+from src.losses import DINOLoss, iBOTPatchLoss, KoLeoLoss, VicRegLoss, HungarianLossComputation, FocalLoss, normalized_l1_loss, bbox_iou, compute_bbox_classification_loss
+from src.detection_training_function import generate_noisy_bboxes, extract_pos_neg_boxes, extract_pos_neg_cls
+from src.data import extract_overlapping_crops_and_boxes, merge_feature_maps, nms_torch
+
 import math
 from functools import partial
 import numpy as np
+import time
 
 def check_nan(tensor, name):
     if torch.isnan(tensor).any():
@@ -28,12 +32,10 @@ class PerceptionModel(Module):
         name = name
         self.log_dir = log_dir + name
         self.dvc = device
+        self.backbone = Encoder( **config )
 
-        self.backbone_c = Backbone( **vars( config['backbone_c'] ) )
-        self.backbone_t = VisionEncoder( **vars( config['backbone_t'] ) )
-
-    def forward(self, images):
-        t = self.backbone_t( self.backbone_c( images ), masks = [ None,None,None ] )
+    def forward(self, images, masks=None):
+        t = self.backbone( images, masks = masks )
         return t
 
     def save(self):
@@ -465,9 +467,7 @@ class ObjectDetectionModel(Module):
         self.fp16_scaler = GradScaler() if config.compute_precision.grad_scaler else None
 
         self.backbone = PerceptionModel( name = config.backbone_name, log_dir = config.log_dir, device = device, config = vars( config.backbone ) )
-        # self.backbone.load()
-        self.detection = TransformerDetection( **vars( config.detection ) )
-        self.proposal = ProposalHead( config.detection.feature_dim )
+        self.detection = RTDETRDecoder( **vars( config.detection ) )
 
         self.hungarian_loss = HungarianLossComputation( **vars( config.hungarian_loss ) )
         self.focal_loss = FocalLoss() 
@@ -483,126 +483,292 @@ class ObjectDetectionModel(Module):
         else:
             loss.backward()
 
-    def forward_backward(self, data, compute_loss = True):
+    def forward_backward(self, data, num_noise=10, compute_loss=True, compute_noise=True):
+        
+        max_num_objects = 30
 
         with torch.amp.autocast( enabled = self.cfg.compute_precision.grad_scaler, device_type = "cuda" ):
 
             # Get data
-            width, height = self.cfg.hungarian_loss.image_width, self.cfg.hungarian_loss.image_height
-            images, labels, bounding_boxes, polygons, proposal_tagets = data
+            # start = time.time()
+            images, labels, bounding_boxes, polygons, mask_patches = data
+            ( masks_pacthes, _, _, _ ) = mask_patches
 
             images = images.cuda( non_blocking = True )
             labels = labels.cuda( non_blocking = True )
             bounding_boxes = bounding_boxes.cuda( non_blocking = True )
+            masks_pacthes = masks_pacthes.cuda( non_blocking = True )
+
+            num_objects = bounding_boxes.shape[1]
+            if num_objects > max_num_objects:
+                bounding_boxes = bounding_boxes[:, :num_objects, :]
+                labels = labels[:, :num_objects]
+            elif num_objects < max_num_objects:
+                num_missing = max_num_objects - num_objects
+                bounding_boxes = F.pad( bounding_boxes, ( 0, 0, 0, num_missing, 0, 0 ), value = 0 )
+                labels = F.pad( labels, ( 0, num_missing ), value = self.hungarian_loss.num_classes )
+
             # polygons = polygons.cuda( non_blocking = True )
-            proposal_tagets = [
-                proposal_tagets[0].cuda( non_blocking = True ),
-                proposal_tagets[1].cuda( non_blocking = True ),
-                proposal_tagets[2].cuda( non_blocking = True ),
-            ]
+            # if bin_objects:
+            #     labels = torch.clamp( labels, 0, 1 ).long()
+            # print("Data loaded in: ", time.time() - start)
+            
+            # Generate noisy boxes
+            # start = time.time()
+            if compute_noise:
+                noisy_boxes, noise_classes = generate_noisy_bboxes( 
+                    bounding_boxes, 
+                    labels,
+                    self.cfg.hungarian_loss.num_classes,
+                    num_copies = num_noise, 
+                    box_noise_scale = 0.1,
+                    cls_noise_ratio = 0.7
+                ) # [ sequence_predctions_postivive_0, sequence_predctions_negative_0, sequence_predctions_postivive_1, sequence_predctions_negative_1, ... ]
+            else:
+                noisy_boxes = None
+                noise_classes = None
+            # print("Noisy boxes generated in: ", time.time() - start)
 
             # Forward Encoder
-            features = self.backbone( images )
-            features = [ x['x_norm_patch_tokens'] for x in features['patch_layers'] ]
+            # start = time.time()
+            features = self.backbone( images, masks = masks_pacthes ) # Forward the backbone, use mask patches to hide the patches and force the model to learn the rest of the image
+            # features = self.backbone( images, masks = None )
+            # print("Backbone features generated in: ", time.time() - start)
 
             # Forward Detection
-            pred_boxes, pred_cls_logits = self.detection( features )
-
-            # Compute Hungarian Alignment
-            pred_indices, target_indices = self.hungarian_loss( pred_boxes, bounding_boxes, pred_cls_logits, labels )
-
-            bs, num_detection_objects, _ = pred_boxes.shape
-            _, nun_target_objects, _ = bounding_boxes.shape
-
-            # Get aligned boxes and labels
-            flattened_boxes = pred_boxes.reshape( bs * num_detection_objects, 4 )
-            flattened_cls_logits = pred_cls_logits.reshape( bs * num_detection_objects, -1 )
-            flattened_target_boxes = bounding_boxes.reshape( bs * nun_target_objects, 4 )
-            flattened_target_labels = labels.reshape( bs * nun_target_objects )
-
-            offset_pred = torch.arange( bs, device = pred_boxes.device ).unsqueeze(1) * num_detection_objects
-            flattened_pred_indices = ( pred_indices + offset_pred ).view(-1)
-            offset_target = torch.arange( bs, device = bounding_boxes.device ).unsqueeze(1) * nun_target_objects
-            flattened_target_indices = ( target_indices + offset_target ).view(-1)                
-
-            sorted_pred_boxes = torch.index_select( flattened_boxes, 0, flattened_pred_indices )
-            sorted_pred_cls_logits = torch.index_select( flattened_cls_logits, 0, flattened_pred_indices )
-
-            sorted_target_boxes = torch.index_select( flattened_target_boxes, 0, flattened_target_indices )
-            sorted_target_labels = torch.index_select( flattened_target_labels, 0, flattened_target_indices )
+            # start = time.time()
+            ( 
+                pred_bboxes, 
+                pred_label_scores, 
+                pred_proposal_bboxes, 
+                pred_proposal_label_scores 
+            ) = self.detection( features, noisy_boxes, noise_classes, noise_groups = num_noise*int(compute_noise), num_objects = bounding_boxes.shape[1] * 2*int(compute_noise) )
+            # print("Detection features generated in: ", time.time() - start)
             
-            # for Boxes filter only real classes
-            mask_indices = sorted_target_labels.nonzero().flatten().view(-1) # 0 = non-object
-            selected_pred_boxes = torch.index_select( sorted_pred_boxes, 0, mask_indices )
-            selected_target_boxes = torch.index_select( sorted_target_boxes, 0, mask_indices )
+            # split the noise boxes and real boxes
+            # start = time.time()
+            if compute_noise:
+                noise_size = 2 * ( num_noise * bounding_boxes.shape[1] )
+                num_pred_tokens = pred_bboxes.shape[2] - noise_size 
+                pred_real_bboxes, pred_noise_bboxes = pred_bboxes.split( [ num_pred_tokens, noise_size ], dim = 2 )
+                pred_real_label_scores, pred_noise_label_scores = pred_label_scores.split( [ num_pred_tokens, noise_size ], dim = 2 )
+            else:
+                pred_real_bboxes = pred_bboxes
+                pred_real_label_scores = pred_label_scores
 
-            loss_accumulator = 0.0
-            loss_dict = {}
+            pred_real_bboxes = torch.cat( [ pred_proposal_bboxes.unsqueeze(0), pred_real_bboxes ] ) # Concat the enc_bboxes as a new layer
+            pred_real_label_scores = torch.cat( [ pred_proposal_label_scores.unsqueeze(0), pred_real_label_scores ] ) # Concat the enc_bboxes as a new layer
+            # print("Detection features split in: ", time.time() - start)
 
-            # l1 Loss
-            l1_loss = normalized_l1_loss( selected_pred_boxes, selected_target_boxes ).mean()
-            loss_accumulator += l1_loss
-            loss_dict['l1_loss'] = l1_loss.item()
-            
-            # GiOU Loss
-            giuo_loss = 1 - bbox_iou( selected_pred_boxes, selected_target_boxes, GIoU = True ).mean()
-            loss_accumulator += giuo_loss
-            loss_dict['giou_loss'] = giuo_loss.item()
+            # start = time.time()
+            # 1. Hungarian Loss on the last Layer using real boxes
+            ( 
+                ( loss_accumulator, loss_dict ), 
+                ( sorted_pred_boxes, sorted_pred_cls_logits, sorted_target_boxes, sorted_target_labels ) 
+            ) = self.hungarian_loss( pred_real_bboxes[-1], bounding_boxes, pred_real_label_scores[-1], labels )
 
-            # Classification Loss
-            cls_loss = self.focal_loss( sorted_pred_cls_logits, sorted_target_labels )
-            loss_accumulator += cls_loss
-            loss_dict['cls_loss'] = cls_loss.item()
+            # 2. Hungarian Loss on all the other layers using real boxes
+            for i in range( 0, pred_real_bboxes.shape[0] - 1 ):
+                ( ( loss_accumulator_, loss_dict_ ), _ ) = self.hungarian_loss( 
+                    pred_real_bboxes[i], 
+                    bounding_boxes, 
+                    pred_real_label_scores[i], 
+                    labels, 
+                )
+                loss_accumulator += loss_accumulator_
+                loss_dict.update( { f'{k}_{i}': v for k, v in loss_dict_.items() } )
+            # print("Hungarian loss computed in: ", time.time() - start)
 
-        if compute_loss:
-            self.backprop_loss( loss_accumulator )
+            if compute_noise:
 
-        output_dict = {
-            'pred_boxes': sorted_pred_boxes.detach().cpu(),
-            'pred_cls': sorted_pred_cls_logits.argmax(-1).detach().cpu(),
-            'target_boxes': sorted_target_boxes.detach().cpu(),
-            'target_labels': sorted_target_labels.detach().cpu(),
-            'o_pred_boxes': pred_boxes.detach().cpu(),
-            'o_pred_cls': pred_cls_logits.argmax(-1).detach().cpu(),
-            # 'proposal_regions': [
-            #     proposal_regions[0].view( bs, 64, 64 ).detach().cpu(),
-            #     proposal_regions[1].view( bs, 32, 32 ).detach().cpu(),
-            #     proposal_regions[2].view( bs, 16, 16 ).detach().cpu(),
-            # ],
-        }
+                # 3. Loss on the positive noise boxes (last layer)
+                # self.hungarian_loss.compute_loss() l1 + giou + cls
+                # For positive we should align wit the gt boxes, and filter out the non-object classes (0), and tehm pass all the boxes to the loss function
+                # pred_positive_nboxes = [bs, num_noise*N, 4]
+                # pred_positive_ncls = [bs, num_noise*N, C]
+                # bounding_boxes = [bs, N, 4]
+                # labels = [bs, N]
+                
+                # start = time.time()
+                B, N = bounding_boxes.shape[:2]
+                num_pos = num_noise * N 
+                gt_boxes_rep = bounding_boxes.unsqueeze( 2 ).expand( B, N, num_noise, 4 ).reshape( B, num_pos, 4 )
+                gt_labels_rep = labels.unsqueeze(1).expand(B, num_noise, N).reshape( B, num_pos )
+                object_mask = gt_labels_rep != 0 
 
-        return loss_dict, output_dict
+                pred_positive_nboxes, pred_negative_nboxes = extract_pos_neg_boxes( pred_noise_bboxes, bounding_boxes )
+                pred_positive_ncls, pred_negative_ncls = extract_pos_neg_cls( pred_noise_label_scores, labels )
+                # print("Noise boxes extracted in: ", time.time() - start)
+                
+                # start = time.time()
+                noise_loss_accumulator = 0.0
+                gt_scores = bbox_iou( pred_positive_nboxes[-1], gt_boxes_rep )
+                loss_noise, loss_dict_noise = self.hungarian_loss.compute_loss(
+                    pred_positive_nboxes[-1],   # predictions [B, num_pos, 4]
+                    gt_boxes_rep,               # targets [B, num_pos, 4]
+                    pred_positive_ncls[-1],     # classification predictions [B, num_pos, C]
+                    gt_labels_rep,              # target labels [B, num_pos]
+                    gt_scores,
+                    mask = object_mask
+                )
+                noise_loss_accumulator += loss_noise
+                loss_dict.update( { f'{k}_noise': v for k, v in loss_dict_noise.items() } )
+
+                # 3.1 Loss on the positive noise boxes (all layers)
+                for i in range( 0, pred_real_bboxes.shape[0] - 1 ):
+                    gt_scores = bbox_iou( pred_positive_nboxes[i], gt_boxes_rep )
+                    loss_noise, loss_dict_noise = self.hungarian_loss.compute_loss(
+                        pred_positive_nboxes[i],    # predictions [B, num_pos, 4]
+                        gt_boxes_rep,               # targets [B, num_pos, 4]
+                        pred_positive_ncls[i],      # classification predictions [B, num_pos, C]
+                        gt_labels_rep,              # target labels [B, num_pos]
+                        gt_scores,
+                        mask = object_mask
+                    )
+                    noise_loss_accumulator += loss_noise
+                    loss_dict.update( { f'{k}_noise_{i}': v for k, v in loss_dict_noise.items() } )
+                # print("Noise loss computed in: ", time.time() - start)
+
+                # 4. Loss on the negative noise boxes (last layer)
+                # start = time.time()
+                non_object_loss = 0.0
+                for i in range( 0, pred_negative_ncls.shape[0] ):
+
+                    # Push all the negative boxes to the non-object class
+                    l = self.focal_loss( pred_negative_ncls[i].flatten( 0, 1 ), torch.zeros( pred_negative_ncls[i].shape[0:2] ).flatten( 0, 1 ).long().to( images.device ) ).sum(1).mean()
+                    non_object_loss += l
+                    loss_dict.update( { f'non_object_loss_{i}': l.item() } )
+
+                    # Apply contrastive loss  between the negative and positive boxes
+                    pos_boxes_last = pred_positive_nboxes[i]  # [B, num_pos, 4]
+                    neg_boxes_last = pred_negative_nboxes[i]  # [B, num_pos, 4]
+
+                    # Minimize the iou between the positive and negative boxes
+                    iou = bbox_iou( pos_boxes_last.unsqueeze(1), neg_boxes_last.unsqueeze(2) )
+                    contrastive_loss = iou.mean()
+                    non_object_loss += contrastive_loss
+                    loss_dict.update( { f'contrastive_loss_{i}': contrastive_loss.item() } )
+                # print("Non-object loss computed in: ", time.time() - start)
+
+                loss_accumulator = (
+                    loss_accumulator
+                    + 0.1 * non_object_loss  
+                    + 0.1 * noise_loss_accumulator
+                )
+
+            if compute_loss:
+                # start = time.time()
+                self.backprop_loss( loss_accumulator )
+                # print("Backprop loss computed in: ", time.time() - start)
+
+            output_dict = {
+                'pred_boxes': sorted_pred_boxes.detach().cpu(),
+                'pred_cls': sorted_pred_cls_logits.argmax(-1).detach().cpu(),
+                'target_boxes': sorted_target_boxes.detach().cpu(),
+                'target_labels': sorted_target_labels.detach().cpu(),
+                'o_pred_boxes': pred_real_bboxes.detach().cpu()[-1],
+                'o_pred_cls': pred_real_label_scores.argmax(-1).detach().cpu()[-1],
+            }
+
+            return loss_dict, output_dict
+
+    def predict(self, image, stride_slices=512, confidence_threshold=0.5, iou_threshold=0.5, id_bg=-1):
+
+        with torch.amp.autocast( enabled = True, device_type = "cuda" ):
+
+            with torch.no_grad():
+                
+                h, w = image.shape[1], image.shape[2]
+                crops, c_boxes = extract_overlapping_crops_and_boxes( image, 640, stride = stride_slices )
+                crops = torch.stack( crops, dim = 0 ).cuda( non_blocking = True )
+
+                # Forward Encoder
+                features = self.backbone( crops )
+
+                # Merge the image back to the original size
+                features = [
+                    merge_feature_maps( c_boxes, features[0], 640, ( w, h ), 80 ).unsqueeze( 0 ),
+                    merge_feature_maps( c_boxes, features[1], 640, ( w, h ), 40 ).unsqueeze( 0 ),
+                    merge_feature_maps( c_boxes, features[2], 640, ( w, h ), 20 ).unsqueeze( 0 ),
+                ]
+
+                # Forward Detection
+                pred = self.detection( features ) # [ bs, objects, 4+classes ]
+                boxes = pred[0,:,:4]
+                scores = pred[0,:,4:].max(-1)[0]
+                labels = pred[0,:,4:].argmax(-1)
+                detectors_index = torch.arange( 0, boxes.shape[0], device = boxes.device )
+
+                # Filter non-object classes
+                object_mask = labels != id_bg
+                boxes = boxes[ object_mask ]
+                scores = scores[ object_mask ]
+                labels = labels[ object_mask ]
+                detectors_index = detectors_index[ object_mask ]
+
+                # Filter low confidence scores
+                score_mask = scores > confidence_threshold
+                boxes = boxes[ score_mask ]
+                scores = scores[ score_mask ]
+                labels = labels[ score_mask ]
+                detectors_index = detectors_index[ score_mask ]
+
+                # NMS
+                indices = nms_torch( boxes, scores, iou_threshold )
+                boxes = boxes[ indices ].cpu()
+                scores = scores[ indices ].cpu()
+                labels = labels[ indices ].cpu()
+                detectors_index = detectors_index[ indices ].cpu()
+
+                return boxes, scores, labels, detectors_index
 
     def get_params_groups(self):
 
-        all_params_groups = [ 
-            {
-                "params": [ p for p in self.detection.parameters() if p.requires_grad ],
-                "lr_multiplier": 1.0,
-                "wd_multiplier": 1.0,
-                "is_last_layer": False,
-            },
-            {
-                "params": [ p for p in self.proposal.parameters() if p.requires_grad ],
-                "lr_multiplier": 1.0,
-                "wd_multiplier": 1.0,
-                "is_last_layer": False,
-            },
-            {
-                "params": [ p for p in self.backbone.parameters() if p.requires_grad ],
-                # "lr_multiplier": 0.1,
-                # "wd_multiplier": 0.1,
-                "lr_multiplier": 1.0,
-                "wd_multiplier": 1.0,
-                "is_last_layer": False
-            }
-        ]            
+        full_trainable = ['dec_score_head.', 'enc_score_head.', 'denoising_class_embed.', 'tgt_embed.', '.15.', 'mask_token']
+        def is_full_trainable(param_name):
+            return any(sub in param_name for sub in full_trainable)
+
+        # For self.detection
+        detection_named_params = list(self.detection.named_parameters())
+        detection_full_group = {
+            "params": [ p for name, p in detection_named_params if p.requires_grad and is_full_trainable( name ) ],
+            "lr_multiplier": 1.0,
+            "wd_multiplier": 1.0,
+            "is_last_layer": False,
+        }
+        detection_other_group = {
+            "params": [ p for name, p in detection_named_params if p.requires_grad and not is_full_trainable( name ) ],
+            "lr_multiplier": 0.01,
+            "wd_multiplier": 0.01,
+            "is_last_layer": False,
+        }
+
+        # For self.backbone
+        backbone_named_params = list( self.backbone.named_parameters() )
+        backbone_full_group = {
+            "params": [ p for name, p in backbone_named_params if p.requires_grad and is_full_trainable( name ) ],
+            "lr_multiplier": 1.0,
+            "wd_multiplier": 1.0,
+            "is_last_layer": False,
+        }
+        backbone_other_group = {
+            "params": [ p for name, p in backbone_named_params if p.requires_grad and not is_full_trainable( name ) ],
+            "lr_multiplier": 0.01,
+            "wd_multiplier": 0.01,
+            "is_last_layer": False,
+        }
+
+        all_params_groups = [
+            detection_full_group,
+            detection_other_group,
+            backbone_full_group,
+            backbone_other_group
+        ]
         total_trainable_params = sum(
             param.numel() for group in all_params_groups for param in group["params"]
         )
         all_names = [ name for name, p in self.detection.named_parameters() if p.requires_grad ]
         all_names += [ name for name, p in self.backbone.named_parameters() if p.requires_grad ]
-        all_names += [ name for name, p in self.proposal.named_parameters() if p.requires_grad ]
         
         print("Total number of trainable layers:", len( all_names ))
         print("Total number of trainable parameters:", total_trainable_params)
@@ -615,12 +781,10 @@ class ObjectDetectionModel(Module):
     def train(self):
         self.backbone.train()
         self.detection.train()
-        self.proposal.train()
     
     def eval(self):
         self.backbone.eval()
         self.detection.eval()
-        self.proposal.eval()
 
     def load(self, chpt=None, eval=True):
         self.load_training( self.log_dir, chpt, eval )

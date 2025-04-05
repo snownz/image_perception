@@ -1,5 +1,5 @@
-from data import build_data_loader
-from models import BackbonePerception
+from src.data import build_data_loader
+from src.models import BackbonePerception
 
 from dataclasses import dataclass, field
 from typing import List
@@ -118,10 +118,10 @@ model = BackbonePerception( cfg, device )
 model.load()
 model.to( device )
 
-from utils import CosineScheduler, MetricLogger
+from src.utils import CosineScheduler, MetricLogger
 
 def build_optimizer(cfg, params_groups):
-    from adopt import ADOPT
+    from src.adopt import ADOPT
     return ADOPT( params_groups, lr = cfg.optim.base_lr, betas = ( cfg.optim.adamw_beta1, cfg.optim.adamw_beta2 ), weight_decay = cfg.optim.weight_decay )
     # from torch.optim import AdamW
     # return AdamW( params_groups, lr = cfg.optim.base_lr, betas = ( cfg.optim.adamw_beta1, cfg.optim.adamw_beta2 ), weight_decay = cfg.optim.weight_decay )

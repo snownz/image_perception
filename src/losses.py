@@ -660,14 +660,13 @@ class FocalLoss(nn.Module):
         super().__init__()
 
     @staticmethod
-    def forward(pred, targets, gamma=1.5, alpha=0.25):
+    def forward(pred, targets, gamma=2.0, alpha=0.75):
 
         bs, nc = pred.shape
-        one_hot = torch.zeros( ( bs, nc + 1 ), dtype = torch.int64, device = targets.device )
-        one_hot.scatter_( 1, targets.unsqueeze(-1), 1 )
-        one_hot = one_hot[..., :-1].to( pred.dtype )  # [bs, nc]
+        one_hot = torch.zeros( ( bs, nc ), dtype = torch.int64, device = targets.device )
+        one_hot.scatter_( 1, targets.unsqueeze(-1), 1 ).long()
 
-        loss = F.binary_cross_entropy_with_logits( pred, one_hot, reduction = "none" )
+        loss = F.binary_cross_entropy_with_logits( pred.float(), one_hot.float(), reduction = "none" )
         pred_prob = pred.sigmoid()  # prob from logits
         p_t = one_hot * pred_prob + ( 1 - one_hot ) * ( 1 - pred_prob )
         modulating_factor = ( 1.0 - p_t ) ** gamma
@@ -675,7 +674,7 @@ class FocalLoss(nn.Module):
         if alpha > 0:
             alpha_factor = one_hot * alpha + ( 1 - one_hot ) * ( 1 - alpha )
             loss *= alpha_factor
-        return loss.mean(1).sum()
+        return loss
 
 class VarifocalLoss(nn.Module):
     
@@ -687,18 +686,13 @@ class VarifocalLoss(nn.Module):
     def forward(pred_score, targets, gt_scores, alpha=0.75, gamma=2.0):
 
         bs, nq, nc = pred_score.shape
-        one_hot = torch.zeros( ( bs, nq, nc + 1 ), dtype = torch.int64, device = targets.device )
+        one_hot = torch.zeros( ( bs, nq, nc ), dtype = torch.int64, device = targets.device )  # no +1
         one_hot.scatter_( 2, targets.unsqueeze(-1), 1 )
-        one_hot = one_hot[..., :-1]
         gt_scores = gt_scores.view( bs, nq, 1 ) * one_hot
         
         weight = alpha * pred_score.sigmoid().pow( gamma ) * ( 1 - one_hot ) + gt_scores * one_hot
-        with torch.amp.autocast( enabled = False ):
-            loss = (
-                ( F.binary_cross_entropy_with_logits( pred_score.float(), gt_scores.float(), reduction = "none") * weight )
-                .mean(1)
-                .sum()
-            )
+        with torch.amp.autocast( enabled = False, device_type = 'cuda' ):
+            loss = ( F.binary_cross_entropy_with_logits( pred_score.float(), gt_scores.float(), reduction = "none") * weight )
         return loss
 
 class HungarianLossComputation(nn.Module):
@@ -722,8 +716,10 @@ class HungarianLossComputation(nn.Module):
         self.image_height = image_height
         self.eps = 1e-8  # for numerical stability
         self.num_classes = num_classes
+        self.focal_loss = VarifocalLoss()
+        self.cost_gain = { "class": 1, "bbox": 5, "giou": 2, "mask": 1, "dice": 1 }
 
-    def compute_pairwise_ciou_loss(self, pred, target):
+    def compute_pairwise_giou_loss(self, pred, target):
         """
         Compute the Complete IoU (CIoU) loss between predicted and target boxes.
 
@@ -763,9 +759,79 @@ class HungarianLossComputation(nn.Module):
         all_target_indices = torch.stack( all_target_indices, dim = 0 )
         return all_pred_indices, all_target_indices
 
+    def compute_loss(self, pred_bboxes, target_bboxes,
+                     pred_classes, target_classes,
+                     gt_scores, mask=None):
+        
+        loss_dict = {}
+        loss_accumulator = 0.0
+        eos_coefficient = 0.0001
+        mask_ = ( target_classes == 0 ).float()
+        mask_ = mask_ * eos_coefficient + ( 1 - mask_ ) * 1.0
+        if mask is not None:
+            mask = mask_ * mask
+        else:
+            mask = mask_
+
+        # l1 Loss
+        l1_loss = normalized_l1_loss( pred_bboxes, target_bboxes ).mean()
+        loss_accumulator += 5.0 * l1_loss
+        loss_dict['l1_loss'] = l1_loss.item()
+        
+        # GiOU Loss
+        giuo_loss = 1 - bbox_iou( pred_bboxes, target_bboxes, GIoU = True ).mean()
+        loss_accumulator += 3.0 * giuo_loss
+        loss_dict['giou_loss'] = giuo_loss.item()
+
+        # Classification Loss
+        if len( pred_classes.shape ) == 2:
+            pred_classes = pred_classes.unsqueeze( 1 )
+            target_classes = target_classes.unsqueeze( 1 )
+            cls_loss = self.focal_loss( pred_classes, target_classes, gt_scores.detach() ).squeeze( 1 )
+            cls_loss = ( cls_loss * mask.unsqueeze(1).detach() ).sum(1).sum() / mask.sum().clamp( min = 1e-8 ).detach()
+        else:
+            cls_loss = self.focal_loss( pred_classes, target_classes, gt_scores.detach() ).sum(-1)
+            cls_loss = ( cls_loss * mask.detach() ).sum( dim = -1 ) / mask.sum( dim = -1 ).clamp( min = 1e-8 ).detach()
+            cls_loss = cls_loss.mean()
+        loss_accumulator += 1.0 * cls_loss
+        loss_dict['cls_loss'] = cls_loss.item()
+
+        return loss_accumulator, loss_dict
+
+    def _cost_mask(self, bs, num_gts, masks=None, gt_mask=None):
+
+        assert masks is not None and gt_mask is not None, 'Make sure the input has `mask` and `gt_mask`'
+        # all masks share the same set of points for efficient matching
+        sample_points = torch.rand( [ bs, 1, self.num_sample_points, 2 ] )
+        sample_points = 2.0 * sample_points - 1.0
+    
+        out_mask = F.grid_sample( masks.detach(), sample_points, align_corners = False ).squeeze(-2)
+        out_mask = out_mask.flatten( 0, 1 )
+    
+        tgt_mask = torch.cat( gt_mask ).unsqueeze(1)
+        sample_points = torch.cat( [ a.repeat( b, 1, 1, 1 ) for a, b in zip( sample_points, num_gts ) if b > 0 ] )
+        tgt_mask = F.grid_sample( tgt_mask, sample_points, align_corners = False ).squeeze( [ 1, 2 ] )
+    
+        with torch.amp.autocast( "cuda", enabled = False, device_type = 'cuda' ):
+            # binary cross entropy cost
+            pos_cost_mask = F.binary_cross_entropy_with_logits( out_mask, torch.ones_like( out_mask ), reduction = 'none' )
+            neg_cost_mask = F.binary_cross_entropy_with_logits( out_mask, torch.zeros_like( out_mask ), reduction = 'none' )
+            cost_mask = torch.matmul( pos_cost_mask, tgt_mask.T ) + torch.matmul( neg_cost_mask, 1 - tgt_mask.T )
+            cost_mask /= self.num_sample_points
+    
+            # dice cost
+            out_mask = F.sigmoid( out_mask )
+            numerator = 2 * torch.matmul( out_mask, tgt_mask.T )
+            denominator = out_mask.sum( -1, keepdim = True ) + tgt_mask.sum(-1).unsqueeze(0)
+            cost_dice = 1 - ( numerator + 1 ) / ( denominator + 1 )
+    
+            C = self.cost_gain['mask'] * cost_mask + self.cost_gain['dice'] * cost_dice
+    
+        return C
+
     def forward(self,
                 pred_bboxes, target_bboxes,
-                pred_classes, target_classes):
+                pred_scores, target_classes):
         """
         Args:
             pred_bboxes (torch.Tensor): Predicted bounding boxes, shape [bs, num_tokens, 4].
@@ -776,33 +842,70 @@ class HungarianLossComputation(nn.Module):
         Returns:
             Tuple: Predicted indices and target indices per batch, based on the overall cost matrix.
         """
-     
-        # a. Pairwise Bounding Box L1 Loss.
-        # pairwise_bbox_l1_loss = normalized_l1_loss( 
-        #     pred_bboxes.unsqueeze(2), 
-        #     target_bboxes.unsqueeze(1),
-        # )  # [bs, num_tokens, num_objects]
 
-        # b. Pairwise Classification Loss.
-        # Expand target and prediction to align dimensions.
-        target_classes_expanded = target_classes.unsqueeze(1).expand( -1, pred_classes.shape[1], -1 ) # [bs, num_tokens, num_objects]
-        pred_log_probs = F.log_softmax( pred_classes, dim = -1 )  # [bs, num_tokens, num_classes]
-        pairwise_cls_neg_log = -pred_log_probs.gather( dim = -1, index = target_classes_expanded ) # [bs, num_tokens, num_objects]
-
-        # c. Pairwise CIoU Loss.
-        pairwise_bbox_ciou_loss = self.compute_pairwise_ciou_loss( pred_bboxes, target_bboxes )
-
-        # d. Combine the pairwise losses using lambda weights.
-        cost_matrix = ( self.lambda_bbox * pairwise_bbox_ciou_loss
-                        + self.lambda_cls * pairwise_cls_neg_log )
+        bs, num_detection_objects, _ = pred_bboxes.shape
+        _, nun_target_objects, _ = target_bboxes.shape
         
-        # cost_matrix = ( self.lambda_bbox * pairwise_bbox_l1_loss
-        #                 + self.lambda_cls * pairwise_cls_neg_log )
+        with torch.no_grad():
 
-        # e. Perform Hungarian matching per batch sample.
-        pred_indices, target_indices = self.hungarian_matching( cost_matrix )
+            # a. Pairwise Classification Loss.
+            # Expand target and prediction to align dimensions.
+            target_classes_expanded = target_classes.unsqueeze(1).expand( -1, pred_scores.shape[1], -1 ) # [bs, num_tokens, num_objects]
+            pred_log_probs = F.log_softmax( pred_scores, dim = -1 )  # [bs, num_tokens, num_classes]
+            cost_class = -pred_log_probs.gather( dim = -1, index = target_classes_expanded ) # [bs, num_tokens, num_objects]
+
+            # b. Pairwise f1 Loss.
+            cost_bbox = ( pred_bboxes.unsqueeze( 2 ) - target_bboxes.unsqueeze( 1 ) ).abs().sum(-1)  # [bs, num_tokens, num_objects]
+
+            # c. Pairwise CIoU Loss.
+            cost_giou = self.compute_pairwise_giou_loss( pred_bboxes, target_bboxes )
+
+            # d. Combine the pairwise losses using lambda weights.
+            C = (
+                self.cost_gain["class"] * cost_class
+                + self.cost_gain["bbox"] * cost_bbox
+                + self.cost_gain["giou"] * cost_giou
+            )
+            mask = ( target_classes_expanded == 0 ).float() 
+            C += ( mask * 1e6 ) # spike the cost for non-object classes to avoid matching between predictions to non-objects.
+            C[C.isnan() | C.isinf()] = 1e6
+            
+            # e. Perform Hungarian matching per batch sample.
+            pred_indices, target_indices = self.hungarian_matching( C )
+
+        # f. Flatten the indices and boxes for easier access.
+        flattened_boxes = pred_bboxes.reshape( bs * num_detection_objects, 4 )
+        flattened_cls_logits = pred_scores.reshape( bs * num_detection_objects, -1 )
+        flattened_target_boxes = target_bboxes.reshape( bs * nun_target_objects, 4 )
+        flattened_target_labels = target_classes.reshape( bs * nun_target_objects )
         
-        return pred_indices, target_indices
+        # g. Create offset indices for the batch size.
+        offset_pred = torch.arange( bs, device = pred_bboxes.device ).unsqueeze(1) * num_detection_objects
+        flattened_pred_indices = ( pred_indices + offset_pred ).view(-1)
+        offset_target = torch.arange( bs, device = target_bboxes.device ).unsqueeze(1) * nun_target_objects
+        flattened_target_indices = ( target_indices + offset_target ).view(-1)                
+
+        # h. Select the boxes and logits based on the indices.
+        sorted_pred_boxes = torch.index_select( flattened_boxes, 0, flattened_pred_indices )
+        sorted_pred_cls_logits = torch.index_select( flattened_cls_logits, 0, flattened_pred_indices )
+        sorted_target_boxes = torch.index_select( flattened_target_boxes, 0, flattened_target_indices )
+        sorted_target_labels = torch.index_select( flattened_target_labels, 0, flattened_target_indices )
+
+        # i. Filter out the non-object indices (0 = non-object).
+        valid_b_indices = sorted_target_labels.nonzero().flatten().view(-1) # 0 = non-object
+        selected_pred_boxes = torch.index_select( sorted_pred_boxes, 0, valid_b_indices )
+        selected_target_boxes = torch.index_select( sorted_target_boxes, 0, valid_b_indices )
+
+        # j. Compute the IoU scores for the selected boxes.
+        gt_scores = bbox_iou( sorted_pred_boxes, sorted_target_boxes )
+        
+        loss_accumulator, loss_dict = self.compute_loss(
+            selected_pred_boxes, selected_target_boxes,
+            sorted_pred_cls_logits, sorted_target_labels,
+            gt_scores
+        )       
+        
+        return ( loss_accumulator, loss_dict ), ( sorted_pred_boxes, sorted_pred_cls_logits, sorted_target_boxes, sorted_target_labels )
 
 
 

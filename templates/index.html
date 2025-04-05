@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Feature Visualization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .images-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        .image-container {
+            flex: 1;
+            min-width: 300px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .features-container {
+            flex: 2;
+            min-width: 400px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .module-selector {
+            margin-bottom: 15px;
+        }
+        .channel-selector {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .feature-image {
+            width: 100%;
+            height: auto;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+        }
+        .feature-views {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            width: 100%;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        h2, h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        .stats {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        .image-tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            border-radius: 4px 4px 0 0;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: white;
+            border-bottom: 2px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Neural Network Feature Visualization</h1>
+    
+    <div class="container">
+        <div class="images-row">
+            <div class="image-container">
+                <div class="image-tabs">
+                    <div class="tab active" data-tab="original">Original</div>
+                    <div class="tab" data-tab="detections">Detections</div>
+                    <div class="tab" data-tab="heatmap">Proposals Heatmap</div>
+                </div>
+                <div id="image-view">
+                    <img id="display-image" src="" alt="Image View">
+                </div>
+            </div>
+        </div>
+        
+        <div class="feature-views">
+            <!-- Feature Maps -->
+            <div class="features-container" id="feature_maps-container">
+                <h2>Feature Maps (Basic)</h2>
+                
+                <div class="channel-selector">
+                    <label for="feature_maps-range">Channel: <span id="feature_maps-value">0</span> / <span id="feature_maps-total">0</span></label>
+                    <input type="range" id="feature_maps-range" min="0" value="0" data-module="feature_maps">
+                </div>
+                
+                <div class="feature-image">
+                    <img id="feature_maps-image" src="" alt="Feature Map">
+                </div>
+                
+                <div class="stats">
+                    <p>Min: <span id="feature_maps-min">-</span></p>
+                    <p>Max: <span id="feature_maps-max">-</span></p>
+                    <p>Mean: <span id="feature_maps-mean">-</span></p>
+                    <p>Shape: <span id="feature_maps-shape">-</span></p>
+                </div>
+            </div>
+            
+            <!-- Small Objects Features -->
+            <div class="features-container" id="features_small-container">
+                <h2>Small Objects Detection Features</h2>
+                
+                <div class="channel-selector">
+                    <label for="features_small-range">Channel: <span id="features_small-value">0</span> / <span id="features_small-total">0</span></label>
+                    <input type="range" id="features_small-range" min="0" value="0" data-module="features_small">
+                </div>
+                
+                <div class="feature-image">
+                    <img id="features_small-image" src="" alt="Small Objects Feature Map">
+                </div>
+                
+                <div class="stats">
+                    <p>Min: <span id="features_small-min">-</span></p>
+                    <p>Max: <span id="features_small-max">-</span></p>
+                    <p>Mean: <span id="features_small-mean">-</span></p>
+                    <p>Shape: <span id="features_small-shape">-</span></p>
+                </div>
+            </div>
+            
+            <!-- Medium Objects Features -->
+            <div class="features-container" id="features_medium-container">
+                <h2>Medium Objects Detection Features</h2>
+                
+                <div class="channel-selector">
+                    <label for="features_medium-range">Channel: <span id="features_medium-value">0</span> / <span id="features_medium-total">0</span></label>
+                    <input type="range" id="features_medium-range" min="0" value="0" data-module="features_medium">
+                </div>
+                
+                <div class="feature-image">
+                    <img id="features_medium-image" src="" alt="Medium Objects Feature Map">
+                </div>
+                
+                <div class="stats">
+                    <p>Min: <span id="features_medium-min">-</span></p>
+                    <p>Max: <span id="features_medium-max">-</span></p>
+                    <p>Mean: <span id="features_medium-mean">-</span></p>
+                    <p>Shape: <span id="features_medium-shape">-</span></p>
+                </div>
+            </div>
+            
+            <!-- Large Objects Features -->
+            <div class="features-container" id="features_large-container">
+                <h2>Large Objects Detection Features</h2>
+                
+                <div class="channel-selector">
+                    <label for="features_large-range">Channel: <span id="features_large-value">0</span> / <span id="features_large-total">0</span></label>
+                    <input type="range" id="features_large-range" min="0" value="0" data-module="features_large">
+                </div>
+                
+                <div class="feature-image">
+                    <img id="features_large-image" src="" alt="Large Objects Feature Map">
+                </div>
+                
+                <div class="stats">
+                    <p>Min: <span id="features_large-min">-</span></p>
+                    <p>Max: <span id="features_large-max">-</span></p>
+                    <p>Mean: <span id="features_large-mean">-</span></p>
+                    <p>Shape: <span id="features_large-shape">-</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Store images data
+        let imageData = {
+            original: null,
+            detections: null,
+            heatmap: null
+        };
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Load image and detections
+            await loadImages();
+            
+            // Load features data
+            await loadFeaturesData();
+            
+            // Set up event listeners
+            document.querySelectorAll('input[type="range"]').forEach(slider => {
+                slider.addEventListener('input', updateChannelValue);
+                slider.addEventListener('change', loadFeatureChannel);
+            });
+            
+            // Set up tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', switchTab);
+            });
+        });
+        
+        function switchTab(event) {
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+            
+            // Show the corresponding image
+            const tabType = event.target.dataset.tab;
+            if (imageData[tabType]) {
+                document.getElementById('display-image').src = imageData[tabType];
+            }
+        }
+        
+        async function loadImages() {
+            try {
+                const response = await fetch('/api/image');
+                const data = await response.json();
+                
+                // Convert hex strings to blob URLs for each image type
+                imageData.original = createImageUrl(data.original);
+                imageData.detections = createImageUrl(data.detections);
+                imageData.heatmap = createImageUrl(data.heatmap);
+                
+                // Show the default image (original)
+                document.getElementById('display-image').src = imageData.original;
+            } catch (error) {
+                console.error('Error loading images:', error);
+            }
+        }
+        
+        function createImageUrl(hexString) {
+            // Convert hex to binary and create a blob URL
+            const binary = hexToArrayBuffer(hexString);
+            const blob = new Blob([binary], {type: 'image/png'});
+            return URL.createObjectURL(blob);
+        }
+        
+        let featuresData = {};
+        
+        async function loadFeaturesData() {
+            try {
+                const response = await fetch('/api/features');
+                const data = await response.json();
+                
+                featuresData = data.features_data;
+                
+                // Hide containers for modules that don't have data
+                for (const moduleKey of data.module_keys) {
+                    const container = document.getElementById(`${moduleKey}-container`);
+                    if (featuresData[moduleKey]) {
+                        // Show container and set up the channel slider
+                        container.style.display = 'block';
+                        
+                        const numChannels = featuresData[moduleKey].num_channels;
+                        
+                        // Update UI
+                        document.getElementById(`${moduleKey}-total`).textContent = numChannels - 1;
+                        
+                        // Set up channel range slider
+                        const channelRange = document.getElementById(`${moduleKey}-range`);
+                        channelRange.max = numChannels - 1;
+                        channelRange.value = 0;
+                        
+                        // Load first channel
+                        loadFeatureChannelForModule(moduleKey, 0);
+                    } else {
+                        // Hide container if no data
+                        container.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading features data:', error);
+            }
+        }
+        
+        function updateChannelValue(event) {
+            const slider = event.target;
+            const moduleKey = slider.dataset.module;
+            const channelValue = slider.value;
+            document.getElementById(`${moduleKey}-value`).textContent = channelValue;
+        }
+        
+        async function loadFeatureChannel(event) {
+            const slider = event.target;
+            const moduleKey = slider.dataset.module;
+            const channelIdx = slider.value;
+            
+            await loadFeatureChannelForModule(moduleKey, channelIdx);
+        }
+        
+        async function loadFeatureChannelForModule(moduleKey, channelIdx) {
+            try {
+                const response = await fetch(`/api/channel/${moduleKey}/${channelIdx}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Convert hex to binary and create a blob URL
+                const binary = hexToArrayBuffer(data.channel_data);
+                const blob = new Blob([binary], {type: 'image/png'});
+                const imageUrl = URL.createObjectURL(blob);
+                
+                document.getElementById(`${moduleKey}-image`).src = imageUrl;
+                
+                // Update stats
+                document.getElementById(`${moduleKey}-min`).textContent = data.min_val.toFixed(4);
+                document.getElementById(`${moduleKey}-max`).textContent = data.max_val.toFixed(4);
+                document.getElementById(`${moduleKey}-mean`).textContent = data.mean_val.toFixed(4);
+                document.getElementById(`${moduleKey}-shape`).textContent = `${data.shape.height}×${data.shape.width}`;
+            } catch (error) {
+                console.error(`Error loading feature channel for ${moduleKey}:`, error);
+            }
+        }
+        
+        // Helper function to convert hex string to ArrayBuffer
+        function hexToArrayBuffer(hex) {
+            const bytes = new Uint8Array(hex.length / 2);
+            for (let i = 0; i < hex.length; i += 2) {
+                bytes[i/2] = parseInt(hex.substr(i, 2), 16);
+            }
+            return bytes.buffer;
+        }
+    </script>
+</body>
+</html>

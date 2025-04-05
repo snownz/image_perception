@@ -29,7 +29,7 @@ dataset_detection_pre/
 
 # Model folders
 models/
-yolo/
+ultralitics/
 
 # Distribution / packaging
 .Python

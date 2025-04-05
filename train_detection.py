@@ -1,8 +1,8 @@
-from data import build_data_loader_train_detection, draw, denormalize_transform
-from models import ObjectDetectionModel
+from src.data import build_data_loader_train_detection, draw
+from src.models import ObjectDetectionModel
+from src.adopt import ADOPT
 
 from dataclasses import dataclass, field
-from typing import List
 
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
 
@@ -19,38 +19,39 @@ def resize_image(image_tensor, size):
 
 @dataclass
 class TrainConfig:
-    EPOCH_LENGTH: int = 5000
+    EPOCH_LENGTH: int = 100
     saveckp_freq: int = 100
 
 @dataclass
 class OptimConfig:
     epochs: int = 100
-    weight_decay: float = 1e-6
-    weight_decay_end: float = 1e-4
-    base_lr: float = 1e-4
-    min_lr: float = 1e-5
-    warmup_epochs: int = 0
+    weight_decay: float = 0.0005
+    weight_decay_end: float = 0.0005
+    base_lr: float = 0.000357
+    min_lr: float = 0.0000357
+    base_momentum: float = 0.937
+    warmup_epochs: int = 3
     clip_grad: float = 3.0
     adamw_beta1: float = 0.9
     adamw_beta2: float = 0.999
 
 @dataclass
-class ConfigBackboneC:
+class ConfigBackbone:
     in_channels: float = 3
-    out_channels: float = 512
-    use_resnet: bool = True
-
-@dataclass
-class ConfigBackboneT:
     embed_dim: float = 512
     num_heads: float = 8
     depth: float = 4
     num_tokens: float = 4096
+    model = ''
 
 @dataclass
 class BackboneConfig:
-    backbone_c: ConfigBackboneC = field( default_factory = ConfigBackboneC )
-    backbone_t: ConfigBackboneT = field( default_factory = ConfigBackboneT )
+    in_channels: float = 3
+    embed_dim: float = 384
+    num_heads: float = 8
+    depth: float = 4
+    num_tokens: float = 4096
+    model: str = "linear"
 
 @dataclass
 class ComputePrecision:
@@ -67,21 +68,28 @@ class HungarianLoss:
 @dataclass
 class DatasetConfig:
     max_poly_points: int = 128
+    crop_size: int = 640
 
 @dataclass
 class Detection:
-    feature_dim: int = 512
-    num_heads: int = 4
-    num_layers: int = 3
-    num_detections: int = 60
-    num_classes: int = 25
-    num_bins: int = 100
+    nc: int = 24
+    ch: tuple = ( 384, 384, 384 )
+    hd: int = 256  # hidden dim
+    nq: int = 300  # num queries
+    ndp: int = 4  # num decoder points
+    nh: int = 8  # num head
+    ndl: int = 6  # num decoder layers
+    d_ffn: int = 1024  # dim of feedforward
+    dropout: float = 0.0
+    act: nn.Module = nn.ReLU()
+    eval_idx: int = -1
+    learnt_init_query: bool = False
 
 @dataclass
 class Config:
     log_dir: str = "./models/"
-    name: str = "detection_v0_small"
-    backbone_name: str = "encoder_v3"
+    name: str = "detection_v5_small"
+    backbone_name: str = "encoder_v5"
     train: TrainConfig = field( default_factory = TrainConfig )
     optim: OptimConfig = field( default_factory = OptimConfig )
     compute_precision: ComputePrecision = field( default_factory = ComputePrecision )
@@ -94,22 +102,26 @@ cfg = Config()
 # torch.autograd.set_detect_anomaly( mode = True, check_nan = True )
 device = ( 'cuda' if torch.cuda.is_available() else 'cpu' )
 
-data_loader = build_data_loader_train_detection( 'dataset_detection', 
-                                                  batch_size = 16, 
-                                                  max_objects = cfg.detection.num_detections, 
-                                                  max_poly_points = cfg.dataset.max_poly_points,
-                                                  crop_size = 512,
-                                                  mode = 'seg' )
+data_loader = build_data_loader_train_detection( 
+    'dataset_detection', 
+    batch_size = 16, 
+    max_objects = cfg.detection.nq, 
+    max_poly_points = cfg.dataset.max_poly_points,
+    # max_poly_points = 5,
+    crop_size = cfg.dataset.crop_size,
+    mode = 'seg' 
+)
 
 model = ObjectDetectionModel( cfg, device )
-model.load()
+# model.load()
 model.to( device )
 
-from utils import CosineScheduler, MetricLogger
+from src.utils import CosineScheduler, MetricLogger
 
 def build_optimizer(cfg, params_groups):
     from torch.optim import AdamW
-    return AdamW( params_groups, lr = cfg.optim.base_lr, betas = ( cfg.optim.adamw_beta1, cfg.optim.adamw_beta2 ), weight_decay = cfg.optim.weight_decay )
+    return ADOPT( params_groups, lr = cfg.optim.base_lr, betas = ( cfg.optim.adamw_beta1, cfg.optim.adamw_beta2 ), weight_decay = cfg.optim.weight_decay, eps = 1e-8 )
+    # return AdamW( params_groups, lr = cfg.optim.base_lr, betas = ( cfg.optim.adamw_beta1, cfg.optim.adamw_beta2 ), weight_decay = cfg.optim.weight_decay, momentum = cfg.optim.base_momentum, eps = 1e-8 )
 
 def build_schedulers(cfg):
 
@@ -152,16 +164,16 @@ optimizer = build_optimizer( cfg, model.get_params_groups() )
 # set model to train mode and half precision
 fp16_scaler = model.fp16_scaler  # for mixed precision training
 model.train()
+model.t_step = 0
 
 tensorboard_logger = MetricLogger( delimiter = "\t", log_dir = cfg.log_dir + "/" + cfg.name, iteration = model.t_step )
 for data in tensorboard_logger.log_every(
     data_loader,
     print_freq = 1,
     header = "Training",
-    n_iterations = model.t_step + 20000,
+    n_iterations = model.t_step + 200000,
     start_iteration = model.t_step,
 ):
-    pass
 
     # schedulers
     lr = lr_schedule[model.t_step]
@@ -207,26 +219,6 @@ for data in tensorboard_logger.log_every(
         data[2] = output_dict["o_pred_boxes"]
         drawn_img = draw( data, grid_cols = 4 )
         tensorboard_logger.update_image( prediction = drawn_img )
-
-        # four_random_indices = np.random.randint( 0, data[0].shape[0], 4 )
-        # images = data[0]
-        # masks = output_dict["proposal_regions"]
-        # images_list = []
-        # for i in range( 4 ):
-        #     img = []
-        #     img_idx = four_random_indices[i]
-        #     for j in range( 3 ):
-        #         mask = masks[j][img_idx]
-        #         mask = ( mask > 0.5 ).float()
-        #         im_size = 512
-        #         mask_size = mask.shape[1]
-        #         random_mask_color = torch.zeros_like( images[img_idx] )
-        #         random_mask_color += torch.rand( 3 )[:,None,None]
-        #         mask = resize_image( mask[None], im_size )
-        #         img.append(  ( mask * denormalize_transform( images[img_idx] ) ) + ( ( 1 - mask ) *  random_mask_color) )
-        #     images_list.append( torch.cat( img, dim = 2 ) )
-        # grid = torch.cat( images_list, dim = 1 )
-        # tensorboard_logger.update_image( region_prediction = grid )
 
     model.t_step += 1
 
