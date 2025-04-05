@@ -374,14 +374,11 @@
                     
                     <div style="margin-top: 15px; position: relative;">
                         <!-- Query Attention Visualization Container -->
-                        <div style="position: relative; width: 100%; height: 600px; overflow: hidden; border: 1px solid #eee; border-radius: 8px;">
-                            <!-- Connection Lines (SVG) - Positioned at bottom for z-index -->
-                            <svg id="attention-lines" width="100%" height="100%" style="position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none;"></svg>
-                            
+                        <div style="position: relative; width: 100%; height: 700px; overflow: hidden; border: 1px solid #eee; border-radius: 8px;">
                             <!-- Single Container for all visualization elements -->
-                            <div style="position: relative; width: 100%; height: 100%; z-index: 2;">
+                            <div style="position: relative; width: 100%; height: 100%;">
                                 <!-- Top Row - Interactive Detected Queries -->
-                                <div style="padding: 15px;">
+                                <div style="padding: 15px; margin-bottom: 20px;">
                                     <h5>Detection Queries (Click to visualize attention)</h5>
                                     <div id="interactive-queries-container" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0;"></div>
                                 </div>
@@ -391,6 +388,9 @@
                                     <h5>All 300 Queries (Showing attention weights)</h5>
                                     <div id="all-queries-container" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 10px 0; min-width: 100%;"></div>
                                 </div>
+                                
+                                <!-- Connection Lines (SVG) - Positioned on top -->
+                                <svg id="attention-lines" width="100%" height="100%" style="position: absolute; top: 0; left: 0; pointer-events: none;"></svg>
                             </div>
                         </div>
                     </div>
@@ -831,14 +831,23 @@
                     
                     // Add click event to show attention weights
                     interactiveCircle.addEventListener('click', async (e) => {
+                        clearAttentionLines(); // First clear any existing connections
+                        
                         const queryIdx = parseInt(e.currentTarget.getAttribute('data-query-idx'));
                         selectedQueryIdx = queryIdx;
                         
+                        // Remove selected class from all circles
                         document.querySelectorAll('.query-circle.selected').forEach(el => {
                             el.classList.remove('selected');
                         });
+                        
+                        // Mark this circle as selected
                         e.currentTarget.classList.add('selected');
                         
+                        // Add visual feedback for clicked circle
+                        e.currentTarget.style.boxShadow = '0 0 10px rgba(255,255,255,0.8)';
+                        
+                        console.log(`Loading attention weights for query ${queryIdx} from layer ${activeAttentionLayer}`);
                         await loadAttentionWeights(activeAttentionLayer, queryIdx);
                     });
                     
@@ -901,12 +910,17 @@
         
         // Draw attention lines based on weights
         function drawAttentionLines(weights) {
-            const svg = document.getElementById('attention-lines');
-            svg.innerHTML = ''; // Clear existing lines
+            console.log("Drawing attention lines with weights:", weights.length);
             
+            // Get SVG and containers
+            const svg = document.getElementById('attention-lines');
             const interactiveContainer = document.getElementById('interactive-queries-container');
             const allQueriesContainer = document.getElementById('all-queries-container');
             
+            // Clear any existing lines
+            svg.innerHTML = '';
+            
+            // Validate required elements
             if (!svg || !interactiveContainer || !allQueriesContainer) {
                 console.error("Could not find required elements for drawing attention lines");
                 return;
@@ -919,67 +933,89 @@
                 return;
             }
             
-            // Get source circle position
-            const sourceRect = sourceCircle.getBoundingClientRect();
-            const svgRect = svg.getBoundingClientRect();
+            // Set a threshold to only show significant connections
+            const maxWeight = Math.max(...weights);
+            if (maxWeight <= 0) {
+                console.error("No significant weights found");
+                return;
+            }
             
-            // Calculate source circle center in SVG coordinates
+            const threshold = maxWeight * 0.05; // Show connections with ≥ 5% of max weight
+            
+            // Get the selected query ID
+            const selectedQueryId = parseInt(sourceCircle.getAttribute('data-query-idx'));
+            console.log("Selected query ID:", selectedQueryId);
+            
+            // Get positions relative to the SVG element
+            const svgRect = svg.getBoundingClientRect();
+            const sourceRect = sourceCircle.getBoundingClientRect();
+            
+            // Calculate source circle center
             const sourceX = sourceRect.left - svgRect.left + sourceRect.width/2;
             const sourceY = sourceRect.top - svgRect.top + sourceRect.height/2;
             
-            // Set a threshold to only show significant connections
-            const maxWeight = Math.max(...weights);
-            const threshold = maxWeight * 0.05; // Show connections with ≥ 5% of max weight
-            
-            // Get the detection index for highlighting the corresponding circles
-            const selectedQueryId = parseInt(sourceCircle.getAttribute('data-query-idx'));
-            
-            // Draw lines to all 300 query circles with significant attention
+            // Draw lines to all query circles with significant attention
             const allQueryCircles = allQueriesContainer.querySelectorAll('.query-circle.all');
+            console.log("Found all-query circles:", allQueryCircles.length);
+            
+            let visibleConnectionCount = 0;
+            
+            // First pass - highlight the corresponding target circle
             allQueryCircles.forEach((targetCircle, idx) => {
-                const weight = weights[idx];
-                if (weight < threshold) return; // Skip weak connections
+                if (idx >= weights.length) return;
                 
-                const targetRect = targetCircle.getBoundingClientRect();
-                
-                // Highlight the target circle if it's the current selected query
                 const targetId = parseInt(targetCircle.getAttribute('data-query-idx'));
                 if (targetId === selectedQueryId) {
                     targetCircle.style.border = '2px solid white';
                     targetCircle.style.boxShadow = '0 0 5px rgba(255,255,255,0.8)';
                 }
+            });
+            
+            // Second pass - draw all connection lines
+            allQueryCircles.forEach((targetCircle, idx) => {
+                if (idx >= weights.length) return;
                 
-                // Calculate target circle center in SVG coordinates
+                const weight = weights[idx];
+                if (weight < threshold) return; // Skip weak connections
+                
+                // Get target position
+                const targetRect = targetCircle.getBoundingClientRect();
                 const targetX = targetRect.left - svgRect.left + targetRect.width/2;
                 const targetY = targetRect.top - svgRect.top + targetRect.height/2;
                 
-                // Create line
+                // Create the connection line
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                
+                // Set line coordinates
                 line.setAttribute('x1', sourceX);
                 line.setAttribute('y1', sourceY);
                 line.setAttribute('x2', targetX);
                 line.setAttribute('y2', targetY);
                 
                 // Scale the stroke width based on weight
-                const maxStrokeWidth = 4;
-                const strokeWidth = (weight / maxWeight) * maxStrokeWidth;
+                const maxStrokeWidth = 3;
+                const strokeWidth = Math.max(0.5, (weight / maxWeight) * maxStrokeWidth);
                 line.setAttribute('stroke-width', strokeWidth);
                 
-                // Color based on weight
-                const opacity = Math.max(0.2, weight / maxWeight);
-                // Use blue for all connection lines with opacity based on weight
+                // Color the line based on weight
+                const opacity = Math.max(0.1, weight / maxWeight);
                 line.setAttribute('stroke', `rgba(75, 108, 183, ${opacity})`);
                 
+                // Add line to SVG
                 svg.appendChild(line);
+                visibleConnectionCount++;
             });
+            
+            console.log(`Visualizing ${visibleConnectionCount} significant connections`);
         }
         
         // Clear all attention visualization lines and highlighting
         function clearAttentionLines() {
+            // Clear SVG content
             const svg = document.getElementById('attention-lines');
             if (svg) svg.innerHTML = '';
             
-            // Also remove highlighting from all query circles
+            // Reset all query circles in the bottom row
             const allQueryCircles = document.querySelectorAll('.query-circle.all');
             if (allQueryCircles) {
                 allQueryCircles.forEach(circle => {
@@ -987,6 +1023,18 @@
                     circle.style.boxShadow = 'none';
                 });
             }
+            
+            // Reset all interactive circles in the top row
+            const interactiveCircles = document.querySelectorAll('.query-circle.interactive');
+            if (interactiveCircles) {
+                interactiveCircles.forEach(circle => {
+                    if (!circle.classList.contains('selected')) {
+                        circle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                    }
+                });
+            }
+            
+            selectedQueryIdx = null;
         }
     </script>
 </body>
