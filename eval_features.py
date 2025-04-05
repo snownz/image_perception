@@ -5,13 +5,16 @@ import numpy as np
 import cv2
 from PIL import Image, ImageDraw, ImageFont
 from torchvision.transforms import ToPILImage
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from src.models import ObjectDetectionModel
 from dataclasses import dataclass, field
 from torch import nn
 import random
 import traceback
 import math
+import os
+import tempfile
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -174,8 +177,17 @@ def load_model():
     for i, l in enumerate( model.detection.decoder.layers ):
         l.self_attn.register_forward_hook(hook_fn(f'decoder_queries_attention_layer_{i}'))
     
-def process_image(image_path='test_images/8.png'):
-    global hook_outputs, model, original_img_size, detection_results
+# Global variable to store the current image path
+current_image_path = 'test_images/8.png'
+
+def process_image(image_path=None):
+    global hook_outputs, model, original_img_size, detection_results, current_image_path
+    
+    # Use provided image path or the current global one
+    if image_path is None:
+        image_path = current_image_path
+    else:
+        current_image_path = image_path  # Update the global image path
     
     # Clear previous hooks output
     hook_outputs = {}
@@ -200,8 +212,8 @@ def process_image(image_path='test_images/8.png'):
     detection_results['detectors'] = detectors.cpu().numpy()
     detection_results['indices'] = occurrence_indices(labels.cpu().numpy())
 
-    indices = occurrence_indices( detection_results['labels'] )
-    detection_results['labels'] = [ f"{int_to_label[l]}_{i}" for l, i in zip( detection_results['labels'], indices ) ]
+    indices = occurrence_indices(detection_results['labels'])
+    detection_results['labels'] = [f"{int_to_label[l]}_{i}" for l, i in zip(detection_results['labels'], indices)]
     
     # Return the processed image for display
     return image
@@ -648,6 +660,46 @@ def get_highlighted_heatmap(layer_key, query_idx):
     return jsonify({
         'heatmap': buffer.tobytes().hex()
     })
+
+# Create a upload folder
+UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), 'nn_visualizer_uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Max 16MB upload
+
+# Set allowed file extensions
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/api/upload', methods=['POST'])
+def upload_image():
+    # Check if the post request has the file part
+    if 'image' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['image']
+    
+    # If user does not select file, browser might submit an empty file
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if file and allowed_file(file.filename):
+        # Secure the filename and save it
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        try:
+            # Process the uploaded image
+            process_image(filepath)
+            return jsonify({'success': True, 'message': 'Image processed successfully'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    else:
+        return jsonify({'error': 'File type not allowed'}), 400
 
 if __name__ == '__main__':
     load_model()

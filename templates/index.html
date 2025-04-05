@@ -202,6 +202,17 @@
     
     <div class="container">
         <section class="section">
+            <div class="upload-container" style="margin-bottom: 20px; display: flex; align-items: center; gap: 15px;">
+                <label for="image-upload" class="upload-button" style="background: #4b6cb7; color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; display: inline-block; transition: all 0.3s;">
+                    <span style="margin-right: 5px;">📤</span> Upload Image
+                </label>
+                <input type="file" id="image-upload" accept="image/*" style="display: none;">
+                <div id="upload-status" style="font-size: 0.9rem;"></div>
+                <button id="process-button" style="background: #182848; color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; display: none; transition: all 0.3s;">
+                    <span style="margin-right: 5px;">🔄</span> Process Image
+                </button>
+            </div>
+            
             <div class="image-tabs">
                 <div class="tab active" data-tab="original">Original Image</div>
                 <div class="tab" data-tab="detections">Object Detections</div>
@@ -610,7 +621,80 @@
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', switchTab);
             });
+            
+            // Set up image upload functionality
+            setupImageUpload();
         });
+        
+        // Set up image upload functionality
+        function setupImageUpload() {
+            const fileInput = document.getElementById('image-upload');
+            const processButton = document.getElementById('process-button');
+            const uploadStatus = document.getElementById('upload-status');
+            let uploadedFile = null;
+            
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // Check if the file is an image
+                if (!file.type.match('image.*')) {
+                    uploadStatus.innerHTML = '<span style="color: red;">Please select an image file</span>';
+                    return;
+                }
+                
+                // Show file name and enable process button
+                uploadStatus.textContent = `Selected: ${file.name}`;
+                uploadedFile = file;
+                processButton.style.display = 'inline-block';
+            });
+            
+            // Process button click event
+            processButton.addEventListener('click', async function() {
+                if (!uploadedFile) return;
+                
+                // Show loading status
+                uploadStatus.innerHTML = '<span style="color: #4b6cb7;">Processing image...</span>';
+                processButton.disabled = true;
+                processButton.style.opacity = '0.7';
+                
+                // Create FormData object and append the file
+                const formData = new FormData();
+                formData.append('image', uploadedFile);
+                
+                try {
+                    // Upload the image to the server for processing
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+                    
+                    // Process the response
+                    uploadStatus.innerHTML = '<span style="color: green;">Image processed successfully!</span>';
+                    
+                    // Reload all images and visualizations
+                    await loadImages();
+                    await loadFeaturesData();
+                    
+                    // Reinitialize attention visualization if needed
+                    if (attentionLayers.length > 0) {
+                        initializeAttentionVisualization();
+                    }
+                    
+                } catch (error) {
+                    console.error('Error processing image:', error);
+                    uploadStatus.innerHTML = '<span style="color: red;">Error processing image. Please try again.</span>';
+                } finally {
+                    // Reset button state
+                    processButton.disabled = false;
+                    processButton.style.opacity = '1';
+                }
+            });
+        }
         
         function switchTab(event) {
             // Get the parent container of the tab
