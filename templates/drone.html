@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Minds - Drone Intelligence Platform</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-dark-blue: #0a2342;
+            --primary-dark-green: #1d5c4d;
+            --accent-blue: #2d6ecc;
+            --accent-green: #25a18e;
+            --light-text: #f0f5fa;
+            --dark-text: #1a1a1a;
+            --card-bg: rgba(255, 255, 255, 0.08);
+            --header-bg: rgba(13, 31, 61, 0.95);
+            --overlay-bg: rgba(10, 35, 66, 0.6);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark-blue) 0%, var(--primary-dark-green) 100%);
+            color: var(--light-text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background-color: var(--header-bg);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .logo i {
+            color: var(--accent-green);
+            margin-right: 0.5rem;
+            font-size: 1.8rem;
+        }
+        
+        .logo span {
+            background: linear-gradient(90deg, #25a18e, #2d6ecc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+        
+        .nav-links a {
+            color: var(--light-text);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: color 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            color: var(--accent-green);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .main-title {
+            margin-bottom: 2.5rem;
+            text-align: center;
+        }
+        
+        .main-title h1 {
+            font-size: 2.8rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        
+        .main-title p {
+            font-size: 1.2rem;
+            color: rgba(240, 245, 250, 0.85);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.15);
+        }
+        
+        .stat-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            font-size: 1.2rem;
+        }
+        
+        .stat-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 0.25rem;
+            display: flex;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        
+        .status-active {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+        
+        .status-inactive {
+            background-color: #e74c3c;
+            box-shadow: 0 0 10px #e74c3c;
+        }
+        
+        .video-section {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        @media (min-width: 1200px) {
+            .video-section {
+                grid-template-columns: 3fr 1fr;
+            }
+        }
+        
+        .video-container {
+            position: relative;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .video-container:hover {
+            transform: scale(1.02);
+        }
+        
+        .video-feed {
+            display: block;
+            width: 100%;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+        
+        .detection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+        
+        .video-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 1rem;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+        
+        .control-btn {
+            background-color: var(--overlay-bg);
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .control-btn:hover {
+            background-color: var(--accent-blue);
+        }
+        
+        .control-btn i {
+            font-size: 1rem;
+        }
+        
+        .detection-list {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            height: 100%;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .list-header {
+            padding: 1.2rem 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .list-header h2 {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .list-header p {
+            color: rgba(240, 245, 250, 0.7);
+            font-size: 0.9rem;
+        }
+        
+        .list-content {
+            padding: 1.5rem;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        
+        .detection-item {
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-green);
+        }
+        
+        .detection-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .section-title {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+            color: var(--light-text);
+            position: relative;
+            padding-left: 1rem;
+        }
+        
+        .section-title::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: linear-gradient(to bottom, var(--accent-green), var(--accent-blue));
+            border-radius: 2px;
+        }
+        
+        .footer {
+            background-color: rgba(10, 35, 66, 0.9);
+            padding: 3rem 0;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .footer-logo {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .footer-logo .logo {
+            margin-bottom: 1rem;
+        }
+        
+        .footer-logo p {
+            max-width: 400px;
+            color: rgba(240, 245, 250, 0.7);
+            font-size: 0.9rem;
+        }
+        
+        .footer-links h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .footer-links ul {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .footer-links a {
+            color: rgba(240, 245, 250, 0.7);
+            text-decoration: none;
+            transition: color 0.3s ease;
+            font-size: 0.9rem;
+        }
+        
+        .footer-links a:hover {
+            color: var(--accent-green);
+        }
+        
+        .copyright {
+            text-align: center;
+            padding: 1.5rem 0;
+            color: rgba(240, 245, 250, 0.6);
+            font-size: 0.9rem;
+            background-color: rgba(8, 28, 53, 0.95);
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                padding: 1rem;
+            }
+            
+            .logo {
+                margin-bottom: 1rem;
+            }
+            
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .main-title h1 {
+                font-size: 2rem;
+            }
+            
+            .main-title p {
+                font-size: 1rem;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                gap: 2rem;
+                text-align: center;
+            }
+            
+            .footer-logo {
+                align-items: center;
+            }
+            
+            .section-title {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-brain"></i>
+                <span>Smart Minds</span>
+            </div>
+            <nav class="nav-links">
+                <a href="#">Home</a>
+                <a href="#">Solutions</a>
+                <a href="#">Technology</a>
+                <a href="#">About Us</a>
+                <a href="#">Contact</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Main Title -->
+        <div class="main-title">
+            <h1>Advanced Drone Intelligence Platform</h1>
+            <p>Real-time object detection and analysis with cutting-edge AI technology.</p>
+        </div>
+        
+        <!-- Stats Section -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-satellite"></i>
+                    </div>
+                    <div class="stat-title">Connection Status</div>
+                </div>
+                <div class="stat-value">
+                    <span id="connection-status"><span class="status-indicator status-inactive"></span>Disconnected</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-tachometer-alt"></i>
+                    </div>
+                    <div class="stat-title">Frame Rate</div>
+                </div>
+                <div class="stat-value">
+                    <span id="frame-rate">0</span> FPS
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-object-group"></i>
+                    </div>
+                    <div class="stat-title">Active Detections</div>
+                </div>
+                <div class="stat-value">
+                    <span id="detection-count">0</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-stopwatch"></i>
+                    </div>
+                    <div class="stat-title">Latency</div>
+                </div>
+                <div class="stat-value">
+                    <span id="latency">0</span> ms
+                </div>
+            </div>
+        </div>
+        
+        <!-- Video Section -->
+        <h2 class="section-title">Live Surveillance</h2>
+        <div class="video-section">
+            <div class="video-container">
+                <img id="video-feed" class="video-feed" src="" alt="Live Stream">
+                <canvas id="detection-overlay" class="detection-overlay"></canvas>
+                <div class="video-controls">
+                    <button id="play-pause" class="control-btn">
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                    <button id="toggle-detections" class="control-btn">
+                        <i class="fas fa-eye-slash"></i> Hide Detections
+                    </button>
+                </div>
+            </div>
+            
+            <div class="detection-list">
+                <div class="list-header">
+                    <h2>Object Analysis</h2>
+                    <p>Live detections with confidence scores</p>
+                </div>
+                <div class="list-content" id="detection-items">
+                    <div class="detection-item">Waiting for detections...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <span>Smart Minds</span>
+                </div>
+                <p>Pioneering the future of intelligent surveillance and drone technology with advanced AI-powered solutions.</p>
+            </div>
+            
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <ul>
+                    <li><a href="#">Home</a></li>
+                    <li><a href="#">Solutions</a></li>
+                    <li><a href="#">Technology</a></li>
+                    <li><a href="#">About Us</a></li>
+                    <li><a href="#">Contact</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-links">
+                <h3>Solutions</h3>
+                <ul>
+                    <li><a href="#">Drone Surveillance</a></li>
+                    <li><a href="#">Object Recognition</a></li>
+                    <li><a href="#">Security Systems</a></li>
+                    <li><a href="#">Data Analytics</a></li>
+                    <li><a href="#">Custom Solutions</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+    
+    <div class="copyright">
+        &copy; 2023 Smart Minds. All rights reserved.
+    </div>
+
+    <script>
+        // Connection variables
+        const socket = io();
+        let isStreaming = true;
+        let showDetections = true;
+        let lastDetections = [];
+        let trackedObjects = {};  // For tracking objects between frames
+        let frameInterval;
+        let frameCount = 0;
+        let lastFrameTime = Date.now();
+        let frameRate = 0;
+        let animationFrameId = null;
+        
+        // DOM elements
+        const videoElement = document.getElementById('video-feed');
+        const overlayCanvas = document.getElementById('detection-overlay');
+        const context = overlayCanvas.getContext('2d');
+        const playPauseButton = document.getElementById('play-pause');
+        const toggleDetectionsButton = document.getElementById('toggle-detections');
+        const connectionStatus = document.getElementById('connection-status');
+        const frameRateDisplay = document.getElementById('frame-rate');
+        const detectionCountDisplay = document.getElementById('detection-count');
+        const latencyDisplay = document.getElementById('latency');
+        const detectionItems = document.getElementById('detection-items');
+        
+        // Configuration for tracking
+        const config = {
+            iouThreshold: 0.3,          // IOU threshold for object tracking
+            transitionDuration: 300,    // ms for smooth transitions between locations
+            smoothingFactor: 0.7        // Smoothing factor for transitions (0-1)
+        };
+        
+        // Set initial image source for video
+        videoElement.src = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAALCAAoACgBAREA/8QAGAABAQEBAQAAAAAAAAAAAAAAAAkHCAr/xAAmEAACAQIFAwQDAAAAAAAAAAABAgMEEQAFBgcSITEIE0FRIiMy/9oACAEBAAA/AO/gkjjQvLIqKO7MQAPyTWtT7p7Y6WleK7160TzWLU1P+yU8beGjjb2Y3HyGcAjz5oXfX1B5rX1Vqt7a6mZHDrQ5LSJI8YIKsksyu7nkA8gjnjxXLvUl6hXraX+oa6pGveRg02ZQBHnYsCwjJgjVuPGOPFN9HPrI9SWn9c0+mdcV+a6hyoxi1arVVW9JLmMcvARoal3VYJCi/lGFQrxIeV4+tdktz9E7n7fYjrHRGfadzmCkKzmnq4wI3RvyjqYGcSwyx/yikVkYeFHI8UoqqWkrIJKatkhjgnUp7kkqRxhgQGKtI6gAMFbiQE8AHxWbajyvblKmnz3MdUyZhlVW1ZFHUz5jQVVTBOjRSRRzwUtG8kUqrJG6tGrAP+fXGu6/0pt5pOTVut85hyXTVCryyxI8qzzsvNqamjBeWRvgKoLEEkDxXJK713783Niq8m2oy2h0hQTsv29NU1R95QR40j0jG0CyKR+QLnuG7AAGnOw2wOjNkdMmhywx1mZVKBsy1BUKBUVkgHIQEERwKe0Sni35PJJPFkCiiuq9c6I0tU5pR5bmWp8uoM1njqgfZqCHf2qWR0j58ItQpL/XHPnxUHc3Jt7NTaRqF2Zz+DL6CsKPmOXanpJjl+YqAGMUrtHI9O7A8C7IwIJUEgm0m02xO4W4O69Fgk+UVbadyvMC1Vm1a/sO7xsQVp6BSwjgAb8XdFLDiQA8V0+iioqamjp6aGOCngRY4YYY1jijRQAqIiAKiqAAqqAAOAK//9k=';
+        
+        // Adjust canvas size to match video
+        function resizeOverlay() {
+            if (videoElement.naturalWidth > 0) {
+                overlayCanvas.width = videoElement.clientWidth;
+                overlayCanvas.height = videoElement.clientHeight;
+            }
+        }
+        
+        // Calculate Intersection over Union (IOU) between two bounding boxes
+        // Boxes are in [xc, yc, w, h] format (center coordinates)
+        function calculateIOU(box1, box2) {
+            const [xc1, yc1, w1, h1] = box1;
+            const [xc2, yc2, w2, h2] = box2;
+            
+            // Calculate corners from center coordinates
+            const x1_1 = xc1 - w1/2;
+            const y1_1 = yc1 - h1/2;
+            const x2_1 = xc1 + w1/2;
+            const y2_1 = yc1 + h1/2;
+            
+            const x1_2 = xc2 - w2/2;
+            const y1_2 = yc2 - h2/2;
+            const x2_2 = xc2 + w2/2;
+            const y2_2 = yc2 + h2/2;
+            
+            // Calculate intersection area
+            const xLeft = Math.max(x1_1, x1_2);
+            const yTop = Math.max(y1_1, y1_2);
+            const xRight = Math.min(x2_1, x2_2);
+            const yBottom = Math.min(y2_1, y2_2);
+            
+            if (xRight < xLeft || yBottom < yTop) {
+                return 0; // No intersection
+            }
+            
+            const intersectionArea = (xRight - xLeft) * (yBottom - yTop);
+            
+            // Calculate area of both bounding boxes
+            const box1Area = w1 * h1;
+            const box2Area = w2 * h2;
+            
+            // Calculate IoU
+            return intersectionArea / (box1Area + box2Area - intersectionArea);
+        }
+        
+        // Generate a consistent color from a string
+        function generateColorFromString(str) {
+            const hash = str.split('').reduce((acc, char) => {
+                return char.charCodeAt(0) + ((acc << 5) - acc);
+            }, 0);
+            
+            const r = (hash & 0xFF) % 256;
+            const g = ((hash >> 8) & 0xFF) % 256;
+            const b = ((hash >> 16) & 0xFF) % 256;
+            
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+        
+        // Update tracked objects with new detections
+        function updateTrackedObjects(newDetections) {
+            // Assign each detection to its best matching tracked object based on IOU
+            const currentIds = Object.keys(trackedObjects);
+            const detectionAssignments = new Set();
+            const trackAssignments = new Set();
+            
+            // Calculate IOU scores between all pairs
+            const matchScores = [];
+            
+            for (let i = 0; i < newDetections.length; i++) {
+                const detection = newDetections[i];
+                
+                for (const trackId of currentIds) {
+                    const track = trackedObjects[trackId];
+                    
+                    // Only match with same class
+                    if (detection.class_name === track.class_name) {
+                        const iou = calculateIOU(detection.bbox, track.currentBbox);
+                        
+                        if (iou >= config.iouThreshold) {
+                            matchScores.push({
+                                detectionIdx: i,
+                                trackId,
+                                iou
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Sort matches by IOU score (highest first)
+            matchScores.sort((a, b) => b.iou - a.iou);
+            
+            // Assign detections to tracks (greedy algorithm)
+            for (const match of matchScores) {
+                if (!detectionAssignments.has(match.detectionIdx) && 
+                    !trackAssignments.has(match.trackId)) {
+                    
+                    // Update the tracked object with new detection
+                    const detection = newDetections[match.detectionIdx];
+                    const track = trackedObjects[match.trackId];
+                    
+                    // Update target bbox, but keep current bbox for smooth transition
+                    track.targetBbox = [...detection.bbox];
+                    track.confidence = detection.confidence;
+                    track.lastUpdated = Date.now();
+                    
+                    detectionAssignments.add(match.detectionIdx);
+                    trackAssignments.add(match.trackId);
+                }
+            }
+            
+            // Remove tracks without matches immediately
+            for (const trackId of currentIds) {
+                if (!trackAssignments.has(trackId)) {
+                    delete trackedObjects[trackId];
+                }
+            }
+            
+            // Create new tracks for unassigned detections
+            for (let i = 0; i < newDetections.length; i++) {
+                if (!detectionAssignments.has(i)) {
+                    const detection = newDetections[i];
+                    const trackId = `${detection.class_name}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+                    
+                    trackedObjects[trackId] = {
+                        id: trackId,
+                        class_name: detection.class_name,
+                        currentBbox: [...detection.bbox],
+                        targetBbox: [...detection.bbox],
+                        confidence: detection.confidence,
+                        // No need for age or isDead properties since we remove objects immediately
+                        
+                        lastUpdated: Date.now(),
+                        color: generateColorFromString(detection.class_name)
+                    };
+                }
+            }
+            
+            // No need to clean up dead tracks since we remove them immediately
+        }
+        
+        // Update positions of all tracked objects for smooth animation
+        function updatePositions() {
+            const now = Date.now();
+            
+            for (const trackId in trackedObjects) {
+                const track = trackedObjects[trackId];
+                
+                // No dead tracks in the loop
+                
+                // Calculate how far to move toward target based on elapsed time
+                const timeSinceUpdate = now - track.lastUpdated;
+                let alpha = Math.min(timeSinceUpdate / config.transitionDuration, 1);
+                
+                // Apply smoothing factor
+                alpha *= config.smoothingFactor;
+                
+                // Interpolate between current and target positions
+                if (alpha < 1) {
+                    for (let i = 0; i < 4; i++) {
+                        track.currentBbox[i] = track.currentBbox[i] + 
+                            (track.targetBbox[i] - track.currentBbox[i]) * alpha;
+                    }
+                } else {
+                    track.currentBbox = [...track.targetBbox];
+                }
+            }
+        }
+        
+        // Update stats display
+        function updateStats() {
+            frameCount++;
+            
+            // Update frame rate every second
+            const now = Date.now();
+            const elapsed = now - lastFrameTime;
+            if (elapsed >= 1000) {
+                frameRate = Math.round((frameCount / elapsed) * 1000);
+                frameRateDisplay.textContent = frameRate;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+            
+            // Update detection count with active tracks
+            const activeTracks = Object.values(trackedObjects).length;
+            detectionCountDisplay.textContent = activeTracks;
+        }
+        
+        // Draw detection boxes on canvas with smooth animation
+        function drawDetections() {
+            if (!showDetections) {
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+                context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                return;
+            }
+            
+            // Update positions for animation
+            updatePositions();
+            
+            // Prepare for drawing
+            const videoWidth = videoElement.clientWidth;
+            const videoHeight = videoElement.clientHeight;
+            const originalWidth = videoElement.naturalWidth || 854;
+            const originalHeight = videoElement.naturalHeight || 480;
+            
+            const scaleX = videoWidth / originalWidth;
+            const scaleY = videoHeight / originalHeight;
+            
+            context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
+            // Draw all active tracking objects
+            for (const trackId in trackedObjects) {
+                const track = trackedObjects[trackId];
+                
+                // No need to check for dead tracks since we remove them immediately
+                
+                // Full opacity since we don't fade out tracks anymore
+                const opacity = 1.0;
+                
+                // Convert center coordinates to corner coordinates
+                const [xc, yc, w, h] = track.currentBbox;
+                const x1 = xc - w/2;
+                const y1 = yc - h/2;
+                const scaledX1 = x1 * scaleX;
+                const scaledY1 = y1 * scaleY;
+                const scaledWidth = w * scaleX;
+                const scaledHeight = h * scaleY;
+                
+                // Draw bounding box with fade out for older tracks
+                context.strokeStyle = track.color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+                context.lineWidth = 2;
+                context.strokeRect(scaledX1, scaledY1, scaledWidth, scaledHeight);
+                
+                // Draw label
+                const label = `${track.class_name}: ${track.confidence.toFixed(2)}`;
+                context.font = '14px Arial';
+                const textWidth = context.measureText(label).width;
+                
+                // Draw label background
+                context.fillStyle = track.color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+                context.fillRect(scaledX1, scaledY1 - 20, textWidth + 8, 20);
+                
+                // Draw label text
+                context.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                context.fillText(label, scaledX1 + 4, scaledY1 - 5);
+            }
+            
+            // Continue animation
+            animationFrameId = requestAnimationFrame(drawDetections);
+        }
+        
+        // Update detection list in the UI
+        function updateDetectionList() {
+            detectionItems.innerHTML = '';
+            
+            // Filter to get only active tracks
+            const activeObjects = Object.values(trackedObjects);
+            
+            if (activeObjects.length === 0) {
+                detectionItems.innerHTML = '<div class="detection-item">No objects detected</div>';
+                return;
+            }
+            
+            // Group detections by class
+            const classGroups = {};
+            activeObjects.forEach(obj => {
+                const className = obj.class_name;
+                if (!classGroups[className]) {
+                    classGroups[className] = [];
+                }
+                classGroups[className].push(obj);
+            });
+            
+            // Create list items
+            Object.keys(classGroups).sort().forEach(className => {
+                const count = classGroups[className].length;
+                const avgConfidence = classGroups[className].reduce(
+                    (sum, obj) => sum + obj.confidence, 0
+                ) / count;
+                
+                const color = generateColorFromString(className);
+                
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.style.borderLeftColor = color;
+                item.innerHTML = `
+                    <strong>${className}</strong>: ${count} instance${count > 1 ? 's' : ''} 
+                    <br><small>Avg confidence: ${avgConfidence.toFixed(2)}</small>
+                `;
+                detectionItems.appendChild(item);
+            });
+        }
+        
+        // Fetch and display a new frame
+        function fetchFrame() {
+            if (!isStreaming) return;
+            
+            const startTime = Date.now();
+            
+            fetch('/frame')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Error fetching frame:', data.error);
+                        return;
+                    }
+                    
+                    videoElement.src = 'data:image/jpeg;base64,' + data.image;
+                    updateStats();
+                    resizeOverlay();
+                    
+                    // Ensure animation is running if we have detections
+                    if (showDetections && !animationFrameId) {
+                        animationFrameId = requestAnimationFrame(drawDetections);
+                    }
+                    
+                    // Measure latency
+                    const endTime = Date.now();
+                    latencyDisplay.textContent = endTime - startTime;
+                })
+                .catch(error => {
+                    console.error('Error fetching frame:', error);
+                });
+        }
+        
+        // Initialize Socket.IO connection
+        socket.on('connect', () => {
+            connectionStatus.innerHTML = '<span class="status-indicator status-active"></span>Connected';
+            console.log('Connected to server');
+        });
+        
+        socket.on('disconnect', () => {
+            connectionStatus.innerHTML = '<span class="status-indicator status-inactive"></span>Disconnected';
+            console.log('Disconnected from server');
+        });
+        
+        // Listen for detection updates via Socket.IO
+        socket.on('detections', (data) => {
+            const newDetections = JSON.parse(data);
+            updateTrackedObjects(newDetections);
+            updateDetectionList();
+        });
+        
+        // Update play/pause button
+        function updatePlayPauseButton() {
+            if (isStreaming) {
+                playPauseButton.innerHTML = '<i class="fas fa-pause"></i> Pause';
+            } else {
+                playPauseButton.innerHTML = '<i class="fas fa-play"></i> Play';
+            }
+        }
+        
+        // Update toggle detections button
+        function updateToggleDetectionsButton() {
+            if (showDetections) {
+                toggleDetectionsButton.innerHTML = '<i class="fas fa-eye-slash"></i> Hide Detections';
+            } else {
+                toggleDetectionsButton.innerHTML = '<i class="fas fa-eye"></i> Show Detections';
+            }
+        }
+        
+        // Handle play/pause button
+        playPauseButton.addEventListener('click', () => {
+            isStreaming = !isStreaming;
+            updatePlayPauseButton();
+            
+            if (isStreaming) {
+                // Restart the frame fetching
+                startVideoFeed();
+            } else {
+                // Stop the frame fetching
+                clearInterval(frameInterval);
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+            }
+        });
+        
+        // Handle toggle detections button
+        toggleDetectionsButton.addEventListener('click', () => {
+            showDetections = !showDetections;
+            updateToggleDetectionsButton();
+            
+            if (!showDetections) {
+                // Clear the canvas and stop animation
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+                context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            } else {
+                // Restart animation
+                if (!animationFrameId) {
+                    animationFrameId = requestAnimationFrame(drawDetections);
+                }
+            }
+        });
+        
+        // Start the video feed
+        function startVideoFeed() {
+            // Initial frame fetch
+            fetchFrame();
+            
+            // Start animation loop if needed
+            if (showDetections && !animationFrameId) {
+                animationFrameId = requestAnimationFrame(drawDetections);
+            }
+            
+            // Schedule regular frame updates
+            frameInterval = setInterval(fetchFrame, 50);  // 20 fps target
+        }
+        
+        // Listen for window resize to adjust overlay
+        window.addEventListener('resize', resizeOverlay);
+        
+        // Initialize when video is loaded
+        videoElement.addEventListener('load', resizeOverlay);
+        
+        // Update UI elements initially
+        updatePlayPauseButton();
+        updateToggleDetectionsButton();
+        
+        // Start video when page loads
+        startVideoFeed();
+    </script>
+</body>
+</html>

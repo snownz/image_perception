@@ -469,13 +469,14 @@ class ObjectDetectionModel(Module):
         self.backbone = PerceptionModel( name = config.backbone_name, log_dir = config.log_dir, device = device, config = vars( config.backbone ) )
         self.detection = RTDETRDecoder( **vars( config.detection ) )
 
-        self.hungarian_loss = HungarianLossComputation( **vars( config.hungarian_loss ) )
-        self.focal_loss = FocalLoss() 
+        if hasattr( config, "detection_loss" ):
+            self.hungarian_loss = HungarianLossComputation( **vars( config.hungarian_loss ) )
+            self.focal_loss = FocalLoss() 
 
-        class_weights = np.zeros( config.hungarian_loss.num_classes )
-        class_weights[0] = 0.1
-        class_weights[1:] = 1.0
-        self.ce_loss = nn.CrossEntropyLoss( weight = torch.tensor( class_weights ).float().cuda() )
+            class_weights = np.zeros( config.hungarian_loss.num_classes )
+            class_weights[0] = 0.1
+            class_weights[1:] = 1.0
+            self.ce_loss = nn.CrossEntropyLoss( weight = torch.tensor( class_weights ).float().cuda() )
 
     def backprop_loss(self, loss):
         if self.fp16_scaler is not None:
@@ -788,3 +789,4 @@ class ObjectDetectionModel(Module):
 
     def load(self, chpt=None, eval=True):
         self.load_training( self.log_dir, chpt, eval )
+

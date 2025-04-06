@@ -1,10 +1,7 @@
-import sys
 import torch
 import torch.nn.functional as F
 import numpy as np
 import cv2
-from PIL import Image, ImageDraw, ImageFont
-from torchvision.transforms import ToPILImage
 from flask import Flask, render_template, jsonify, request
 from src.models import ObjectDetectionModel
 from dataclasses import dataclass, field
@@ -48,7 +45,7 @@ int_to_label = {
 
 # Generate colors for labels and detectors - set random seed for consistency
 random.seed(42)
-det_to_color = {i: (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for i in range(300)}
+det_to_color = { i: ( random.randint( 0, 255 ), random.randint( 0, 255 ), random.randint( 0, 255 ) ) for i in range( 300 ) }
 
 @dataclass
 class BackboneConfig:
@@ -130,7 +127,7 @@ def draw_star(image, x, y, size, color, thickness=2):
 hook_outputs = {}
 model = None
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-original_img_size = (640, 640)  # Default size for display scaling
+original_img_size = ( 640, 640 ) # Default size for display scaling
 detection_results = {
     'boxes': None,
     'scores': None,
