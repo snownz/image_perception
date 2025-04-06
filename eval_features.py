@@ -496,7 +496,7 @@ def get_channel(module, channel_idx):
     channel_norm = ((channel - channel.min()) / (channel.max() - channel.min() + 1e-8) * 255).astype(np.uint8)
     
     # Convert to heatmap
-    heatmap = cv2.applyColorMap(channel_norm, cv2.COLORMAP_VIRIDIS)
+    heatmap = cv2.applyColorMap(channel_norm, cv2.COLORMAP_HOT)
     
     # Resize to original image dimensions
     heatmap_resized = cv2.resize(heatmap, (original_img_size[0], original_img_size[1]), 
