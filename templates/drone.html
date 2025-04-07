@@ -441,11 +441,12 @@
                 <span>Smart Minds</span>
             </div>
             <nav class="nav-links">
-                <a href="#">Home</a>
-                <a href="#">Solutions</a>
-                <a href="#">Technology</a>
-                <a href="#">About Us</a>
-                <a href="#">Contact</a>
+                <a href="/">Home</a>
+                <a href="/drone">Drone</a>
+                <a href="/features">Features</a>
+                <a href="/detection">Detection</a>
+                <a href="/model">Model</a>
+                <a href="/about">About Us</a>
             </nav>
         </div>
     </header>
@@ -544,35 +545,26 @@
                     <i class="fas fa-brain"></i>
                     <span>Smart Minds</span>
                 </div>
-                <p>Pioneering the future of intelligent surveillance and drone technology with advanced AI-powered solutions.</p>
+                <p>Computer Vision technology with advanced AI-powered solutions.</p>
             </div>
             
             <div class="footer-links">
                 <h3>Quick Links</h3>
                 <ul>
-                    <li><a href="#">Home</a></li>
-                    <li><a href="#">Solutions</a></li>
-                    <li><a href="#">Technology</a></li>
-                    <li><a href="#">About Us</a></li>
-                    <li><a href="#">Contact</a></li>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/drone">Drone</a></li>
+                    <li><a href="/features">Features</a></li>
+                    <li><a href="/detection">Detection</a></li>
+                    <li><a href="/model">Model</a></li>
+                    <li><a href="/about">About Us</a></li>
                 </ul>
             </div>
             
-            <div class="footer-links">
-                <h3>Solutions</h3>
-                <ul>
-                    <li><a href="#">Drone Surveillance</a></li>
-                    <li><a href="#">Object Recognition</a></li>
-                    <li><a href="#">Security Systems</a></li>
-                    <li><a href="#">Data Analytics</a></li>
-                    <li><a href="#">Custom Solutions</a></li>
-                </ul>
-            </div>
         </div>
     </footer>
     
     <div class="copyright">
-        &copy; 2023 Smart Minds. All rights reserved.
+        &copy; 2025 Smart Minds. All rights reserved.
     </div>
 
     <script>
@@ -587,6 +579,13 @@
         let lastFrameTime = Date.now();
         let frameRate = 0;
         let animationFrameId = null;
+        
+        // Function to handle page unload - stop drone threads
+        function stopDroneThreads() {
+            socket.emit('leave_drone', {}, (response) => {
+                console.log('Stopped drone threads:', response);
+            });
+        }
         
         // DOM elements
         const videoElement = document.getElementById('video-feed');
@@ -1048,6 +1047,19 @@
         
         // Start video when page loads
         startVideoFeed();
+        
+        // Listen for page unload/navigation events to stop the drone threads
+        window.addEventListener('beforeunload', stopDroneThreads);
+        
+        // Also listen for navigation within the SPA if applicable
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            if (link.getAttribute('href') !== '/drone') {
+                link.addEventListener('click', function(e) {
+                    // Only run if this is a link to a different page
+                    stopDroneThreads();
+                });
+            }
+        });
     </script>
 </body>
 </html>

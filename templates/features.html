@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Minds - Drone Intelligence Platform</title>
+    <style>
+        :root {
+            --primary-dark-blue: #0a2342;
+            --primary-dark-green: #1d5c4d;
+            --accent-blue: #2d6ecc;
+            --accent-green: #25a18e;
+            --light-text: #f0f5fa;
+            --dark-text: #1a1a1a;
+            --card-bg: rgba(255, 255, 255, 0.08);
+            --header-bg: rgba(13, 31, 61, 0.95);
+            --overlay-bg: rgba(10, 35, 66, 0.6);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark-blue) 0%, var(--primary-dark-green) 100%);
+            color: var(--light-text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background-color: var(--header-bg);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .logo i {
+            color: var(--accent-green);
+            margin-right: 0.5rem;
+            font-size: 1.8rem;
+        }
+        
+        .logo span {
+            background: linear-gradient(90deg, #25a18e, #2d6ecc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+        
+        .nav-links a {
+            color: var(--light-text);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: color 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            color: var(--accent-green);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .main-title {
+            margin-bottom: 2.5rem;
+            text-align: center;
+        }
+        
+        .main-title h1 {
+            font-size: 2.8rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        
+        .main-title p {
+            font-size: 1.2rem;
+            color: rgba(240, 245, 250, 0.85);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .section h2 {
+            color: var(--light-text);
+            margin-top: 0;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        }
+        
+        .section h3 {
+            color: var(--light-text);
+        }
+        
+        .image-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            background-color: rgba(255, 255, 255, 0.05);
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+            transition: all 0.3s ease;
+        }
+        
+        .tab.active {
+            background-color: var(--accent-green);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .image-container {
+            width: 100%;
+            margin-bottom: 20px;
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .image-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .features-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: a20px;
+            margin-top: 20px;
+        }
+        
+        .feature-card {
+            flex: 1;
+            min-width: 300px;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(5px);
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.15);
+        }
+        
+        .channel-selector {
+            width: 100%;
+            margin: 15px 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .channel-selector label {
+            margin-right: 10px;
+            width: 150px;
+        }
+        
+        .channel-selector input[type="range"] {
+            flex: 1;
+            height: 8px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            border-radius: 4px;
+        }
+        
+        .channel-selector input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .feature-image {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .feature-image img {
+            aspect-ratio: 1;
+            object-fit: cover;
+            width: 100%;
+        }
+        
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .stats p {
+            margin: 0;
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        
+        .emoji-title {
+            font-size: 1.5rem;
+            margin-right: 10px;
+        }
+        
+        /* Custom styles for query circles */
+        .query-circle {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .query-circle:hover {
+            transform: scale(1.2);
+            z-index: 100;
+            box-shadow: 0 0 8px rgba(255,255,255,0.7) !important;
+        }
+        
+        /* Enhanced tooltips for queries */
+        .query-tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .intro-text {
+            margin-bottom: 20px;
+            line-height: 1.8;
+        }
+        
+        ul {
+            padding-left: 20px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        .footer {
+            background-color: rgba(10, 35, 66, 0.9);
+            padding: 3rem 0;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .footer-logo {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .footer-logo .logo {
+            margin-bottom: 1rem;
+        }
+        
+        .footer-logo p {
+            max-width: 400px;
+            color: rgba(240, 245, 250, 0.7);
+            font-size: 0.9rem;
+        }
+        
+        .footer-links h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .footer-links ul {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .footer-links a {
+            color: rgba(240, 245, 250, 0.7);
+            text-decoration: none;
+            transition: color 0.3s ease;
+            font-size: 0.9rem;
+        }
+        
+        .footer-links a:hover {
+            color: var(--accent-green);
+        }
+        
+        .copyright {
+            text-align: center;
+            padding: 1.5rem 0;
+            color: rgba(240, 245, 250, 0.6);
+            font-size: 0.9rem;
+            background-color: rgba(8, 28, 53, 0.95);
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                padding: 1rem;
+            }
+            
+            .logo {
+                margin-bottom: 1rem;
+            }
+            
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .main-title h1 {
+                font-size: 2rem;
+            }
+            
+            .main-title p {
+                font-size: 1rem;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                gap: 2rem;
+                text-align: center;
+            }
+            
+            .footer-logo {
+                align-items: center;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-brain"></i>
+                <span>Smart Minds</span>
+            </div>
+            <nav class="nav-links">
+                <a href="/">Home</a>
+                <a href="/drone">Drone</a>
+                <a href="/features">Features</a>
+                <a href="/detection">Detection</a>
+                <a href="/model">Model</a>
+                <a href="/about">About Us</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Main Title -->
+        <div class="main-title">
+            <h1>Neural Network Feature Visualization</h1>
+            <p>Explore the inner workings of a deep learning object detection model</p>
+        </div>
+        <section class="section">
+            <div class="upload-container" style="margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 12px;">
+                    <label for="image-upload" class="upload-button" style="background: #4b6cb7; color: white; padding: 12px 20px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; transition: all 0.3s; font-weight: 500; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <span style="margin-right: 8px; font-size: 1.1em;">📤</span> Upload Image
+                    </label>
+                    <input type="file" id="image-upload" accept="image/*" style="display: none;">
+                    
+                    <button id="camera-button" style="background: #4b6cb7; color: white; padding: 12px 20px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; transition: all 0.3s; font-weight: 500; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <span style="margin-right: 8px; font-size: 1.1em;">📷</span> Take Picture
+                    </button>
+                    
+                    <button id="process-button" style="background: #182848; color: white; padding: 12px 20px; border-radius: 6px; cursor: pointer; display: none; transition: all 0.3s; font-weight: 500; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <span style="margin-right: 8px; font-size: 1.1em;">🔄</span> Process Image
+                    </button>
+                </div>
+                
+                <div id="upload-status" style="font-size: 0.95rem; padding: 8px 0; color: #555; min-height: 20px;"></div>
+                
+                <!-- Camera modal -->
+                <div id="camera-modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8);">
+                    <div style="background-color: white; margin: 5% auto; padding: 30px; width: 90%; max-width: 800px; border-radius: 12px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                        <span id="close-camera" style="position: absolute; right: 25px; top: 20px; font-size: 28px; cursor: pointer; color: #666;">&times;</span>
+                        <h3 style="margin-top: 0; color: #4b6cb7; font-size: 1.5rem; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">Take a Picture</h3>
+                        <div style="display: flex; flex-direction: column; align-items: center;">
+                            <div style="width: 100%; position: relative; margin-bottom: 20px; border-radius: 8px; overflow: hidden; box-shadow: 0 3px 10px rgba(0,0,0,0.1);">
+                                <video id="camera-preview" style="width: 100%; max-height: 450px; background-color: #000; display: block;" autoplay playsinline></video>
+                                <canvas id="camera-canvas" style="width: 100%; max-height: 450px; display: none;"></canvas>
+                            </div>
+                            <div id="camera-controls" style="display: flex; gap: 15px; margin-top: 15px; justify-content: center; width: 100%;">
+                                <button id="capture-button" style="background: #4b6cb7; color: white; padding: 12px 25px; border-radius: 6px; cursor: pointer; border: none; font-weight: 500; font-size: 1rem; display: flex; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <span style="margin-right: 8px;">📸</span> Capture
+                                </button>
+                                <button id="retry-button" style="background: #f0f0f0; color: #333; padding: 12px 25px; border-radius: 6px; cursor: pointer; border: none; font-weight: 500; font-size: 1rem; display: none; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <span style="margin-right: 8px;">🔄</span> Try Again
+                                </button>
+                                <button id="use-photo-button" style="background: #182848; color: white; padding: 12px 25px; border-radius: 6px; cursor: pointer; border: none; font-weight: 500; font-size: 1rem; display: none; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <span style="margin-right: 8px;">✅</span> Use Photo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="image-tabs">
+                <div class="tab active" data-tab="original">Original Image</div>
+                <div class="tab" data-tab="detections">Object Detections</div>
+            </div>
+            <div class="image-container">
+                <img id="display-image" src="" alt="Neural Network Visualization">
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🧠 Stage 1: Encoder (Feature Extraction & Context Building)</h2>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🔍</span> 1.1 Convolutional Backbone — A City of Watchtowers</h3>
+                <div class="intro-text">
+                    <p>Imagine the input image as a wide landscape:</p>
+                    <ul>
+                        <li>Convolutional layers are like <strong>watchtowers</strong>, each scanning a small patch of the image.</li>
+                        <li>As we stack these layers, the watchtowers get taller and see more abstract patterns—edges, textures, shapes, and eventually object parts.</li>
+                        <li>These observations are compiled into <strong>feature maps</strong>, like a tactical map of important landmarks in the scene.</li>
+                    </ul>
+                </div>
+                
+                <div style="display: flex; justify-content: center; width: 100%; margin: 20px 0;">
+                    <div class="feature-card" id="feature_maps-container" style="max-width: 25%;">
+                        <h4>Feature Maps (Basic)</h4>
+                        <div class="channel-selector">
+                            <label for="feature_maps-range">Channel: <span id="feature_maps-value">0</span> / <span id="feature_maps-total">0</span></label>
+                            <input type="range" id="feature_maps-range" min="0" value="0" data-module="feature_maps">
+                        </div>
+                        <div class="feature-image" style="width: 100%;">
+                            <img id="feature_maps-image" src="" alt="Basic Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="feature_maps-min">-</span></p>
+                            <p>Max: <span id="feature_maps-max">-</span></p>
+                            <p>Mean: <span id="feature_maps-mean">-</span></p>
+                            <p>Shape: <span id="feature_maps-shape">-</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🌐</span> 1.2 Transformer Encoding — Global Awareness Across the Map</h3>
+                <div class="intro-text">
+                    <p>Once feature maps are formed, they are passed into a <strong>Transformer encoder</strong>:</p>
+                    <ul>
+                        <li>Each cell (pixel location) in the feature map becomes a <strong>node in a communication network</strong>.</li>
+                        <li>Every node can talk to every other node. This means a patch showing part of a car can understand that distant wheels and windows are part of the same object.</li>
+                        <li>This step gives every region <strong>global context</strong>, fusing together the <strong>local details</strong> and the <strong>big picture</strong>.</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🔎</span> 1.3 Multi-Scale Features — Switching Lenses</h3>
+                <div class="intro-text">
+                    <p>To detect objects of all sizes, the encoder creates <strong>three different feature map resolutions</strong>:</p>
+                    <ul>
+                        <li><strong>High-resolution</strong> for small objects.</li>
+                        <li><strong>Mid-resolution</strong> for medium objects.</li>
+                        <li><strong>Low-resolution</strong> for large objects.</li>
+                        <li>Like having <strong>three zoom lenses</strong>—each gives a different perspective, ensuring we don't miss anything from ants to elephants.</li>
+                    </ul>
+                </div>
+                
+                <div class="features-row">
+                    <div class="feature-card" id="features_small-container">
+                        <h4>Small Objects Detection Features</h4>
+                        <div class="channel-selector">
+                            <label for="features_small-range">Channel: <span id="features_small-value">0</span> / <span id="features_small-total">0</span></label>
+                            <input type="range" id="features_small-range" min="0" value="0" data-module="features_small">
+                        </div>
+                        <div class="feature-image">
+                            <img id="features_small-image" src="" alt="Small Objects Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="features_small-min">-</span></p>
+                            <p>Max: <span id="features_small-max">-</span></p>
+                            <p>Mean: <span id="features_small-mean">-</span></p>
+                            <p>Shape: <span id="features_small-shape">-</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card" id="features_medium-container">
+                        <h4>Medium Objects Detection Features</h4>
+                        <div class="channel-selector">
+                            <label for="features_medium-range">Channel: <span id="features_medium-value">0</span> / <span id="features_medium-total">0</span></label>
+                            <input type="range" id="features_medium-range" min="0" value="0" data-module="features_medium">
+                        </div>
+                        <div class="feature-image">
+                            <img id="features_medium-image" src="" alt="Medium Objects Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="features_medium-min">-</span></p>
+                            <p>Max: <span id="features_medium-max">-</span></p>
+                            <p>Mean: <span id="features_medium-mean">-</span></p>
+                            <p>Shape: <span id="features_medium-shape">-</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card" id="features_large-container">
+                        <h4>Large Objects Detection Features</h4>
+                        <div class="channel-selector">
+                            <label for="features_large-range">Channel: <span id="features_large-value">0</span> / <span id="features_large-total">0</span></label>
+                            <input type="range" id="features_large-range" min="0" value="0" data-module="features_large">
+                        </div>
+                        <div class="feature-image">
+                            <img id="features_large-image" src="" alt="Large Objects Feature Map">
+                        </div>
+                        <div class="stats">
+                            <p>Min: <span id="features_large-min">-</span></p>
+                            <p>Max: <span id="features_large-max">-</span></p>
+                            <p>Mean: <span id="features_large-mean">-</span></p>
+                            <p>Shape: <span id="features_large-shape">-</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🎯 Stage 2: Decoder (Query-Based Detection)</h2>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">📍</span> 2.1 Region Proposals — A Grid of Possibilities</h3>
+                <div class="intro-text">
+                    <p>The first step in the detection process:</p>
+                    <ul>
+                        <li>Each cell across the feature maps is considered a <strong>candidate location for an object</strong>.</li>
+                        <li>Think of a <strong>grid overlay</strong> on the image, where each square whispers, "Maybe there's something here."</li>
+                        <li>The model evaluates all potential regions to find the most promising candidates.</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🔎</span> 2.2 Selecting Queries — 300 Detectives on the Scene</h3>
+                <div class="intro-text">
+                    <p>Visualized by the circles in the heatmap and bounding boxes in the detection view:</p>
+                    <ul>
+                        <li>From all candidate regions, the model selects <strong>300 detection tokens</strong> (queries).</li>
+                        <li>Each one acts like a <strong>detective</strong>, investigating part of the scene to decide: <em>"Is there something here worth reporting?"</em></li>
+                        <li>These detectives collaborate through attention mechanisms to refine their understanding of what they're looking at.</li>
+                        <li>Only the most confident detections are shown in the final output.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="subsection">
+                                    
+                <div style="display: flex; justify-content: center; margin: 20px 0;">
+                    <div style="background: var(--card-bg); padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); color: var(--light-text); border: 1px solid rgba(255, 255, 255, 0.05);">
+                        <h4 style="margin-top: 0;">Query Token Legend</h4>
+                        <div style="display: flex; gap: 20px;">
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 10px; height: 10px; border: 2px solid var(--accent-green); border-radius: 50%; margin-right: 10px;"></div>
+                                <span>Small circles: queries from large feature maps</span>
+                            </div>
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 20px; height: 20px; border: 2px solid var(--accent-green); border-radius: 50%; margin-right: 10px;"></div>
+                                <span>Medium circles: queries from medium feature maps</span>
+                            </div>
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 30px; height: 30px; border: 2px solid var(--accent-green); border-radius: 50%; margin-right: 10px;"></div>
+                                <span>Large circles: queries from small feature maps</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="image-container">
+                    <img id="heatmap-image" src="" alt="Region Proposals Heatmap">
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🧭</span> 2.3 Self-Attention Among Queries — Team Coordination</h3>
+                <div class="intro-text">
+                    <p>The key to effective object detection:</p>
+                    <ul>
+                        <li>All 300 queries attend to each other via <strong>self-attention</strong>.</li>
+                        <li>This is like a <strong>briefing room</strong>, where detectives compare notes and decide who handles which suspect (object), avoiding overlap and ensuring full coverage.</li>
+                        <li>The visualization below shows how queries exchange information to make better decisions.</li>
+                    </ul>
+                </div>
+                
+                <div style="background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 20px; border: 1px solid rgba(255, 255, 255, 0.05); color: var(--light-text);">
+                    <h4>Query Self-Attention Visualization</h4>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label for="attention-layer-select">Decoder Layer: </label>
+                        <select id="attention-layer-select" style="padding: 5px; border-radius: 4px; margin-left: 10px; background: rgba(255, 255, 255, 0.1); color: var(--light-text); border: 1px solid rgba(255, 255, 255, 0.2);"></select>
+                    </div>
+                    
+                    <div style="margin-top: 15px; position: relative;">
+                        <!-- Query Attention Visualization Container -->
+                        <div style="position: relative; width: 100%; height: 700px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; background: rgba(0, 0, 0, 0.2);">
+                            <!-- Single Container for all visualization elements -->
+                            <div style="position: relative; width: 100%; height: 100%;">
+                                <!-- Top Row - Interactive Detected Queries -->
+                                <div style="padding: 15px; margin-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                                    <h5>Detection Queries (Click to visualize attention)</h5>
+                                    <div id="interactive-queries-container" style="display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0;"></div>
+                                </div>
+                                
+                                <!-- Bottom Row - All 300 Queries -->
+                                <div style="padding: 15px; height: 400px; overflow-x: auto; margin-top: 20px;">
+                                    <h5>All 300 Queries (Showing attention weights)</h5>
+                                    <div id="all-queries-container" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 10px 0; min-width: 100%;"></div>
+                                </div>
+                                
+                                <!-- Connection Lines (SVG) - Positioned on top -->
+                                <svg id="attention-lines" width="100%" height="100%" style="position: absolute; top: 0; left: 0; pointer-events: none;"></svg>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 15px;">
+                        <p><strong>How to use:</strong> Click on a detection query in the top row to see how it attends to all 300 queries below. The thickness of the connecting lines represents attention weight.</p>
+                        
+                        <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px;">
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 12px; height: 12px; background-color: #999; border-radius: 50%; margin-right: 5px;"></div>
+                                <span>Non-detection query</span>
+                            </div>
+                            <div id="class-legend" style="display: flex; flex-wrap: wrap; gap: 15px;"></div>
+                            
+                            <script>
+                                // Populate legend with detection query colors when data is loaded
+                                document.addEventListener('DOMContentLoaded', () => {
+                                    // Add a slight delay to ensure detection data is loaded
+                                    setTimeout(() => {
+                                        const legendContainer = document.getElementById('class-legend');
+                                        if (!legendContainer || !detection_results) return;
+                                        
+                                        // Clear any existing content
+                                        legendContainer.innerHTML = '';
+                                        
+                                        // Create a simpler legend explaining the coloring
+                                        const legendItem = document.createElement('div');
+                                        legendItem.style.display = 'flex';
+                                        legendItem.style.alignItems = 'center';
+                                        
+                                        const colorBox = document.createElement('div');
+                                        colorBox.style.width = '12px';
+                                        colorBox.style.height = '12px';
+                                        colorBox.style.backgroundColor = '#3388FF';
+                                        colorBox.style.borderRadius = '50%';
+                                        colorBox.style.marginRight = '5px';
+                                        
+                                        const labelText = document.createElement('span');
+                                        labelText.textContent = "Detector queries (uniquely colored by ID)";
+                                        
+                                        legendItem.appendChild(colorBox);
+                                        legendItem.appendChild(labelText);
+                                        legendContainer.appendChild(legendItem);
+                                    }, 1000);
+                                });
+                            </script>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            
+        </section>
+
+        <section class="section">
+            <h2>🧾 Stage 3: Detection (Final Predictions)</h2>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🏷️</span> 3.1 Object Class Prediction — Identifying What's There</h3>
+                <div class="intro-text">
+                    <p>After queries have gathered all necessary context:</p>
+                    <ul>
+                        <li>The model predicts <strong>what kind of object</strong> each query is looking at (if any).</li>
+                        <li>Is it a person, a car, a stop sign, or something else?</li>
+                        <li>For each query, a <strong>confidence score</strong> is assigned to each possible class.</li>
+                        <li>Only predictions with high enough confidence scores are kept.</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">📏</span> 3.2 Bounding Box Prediction — Locating Objects Precisely</h3>
+                <div class="intro-text">
+                    <p>In parallel with class prediction:</p>
+                    <ul>
+                        <li>The model predicts the <strong>exact coordinates</strong> of each object.</li>
+                        <li>These coordinates form a <strong>bounding box</strong> around the detected object.</li>
+                        <li>The prediction includes: top-left corner (x, y), width, and height.</li>
+                        <li>This is why we say the model does "object detection" not just "classification"—it both identifies <em>what</em> objects are present and <em>where</em> they are.</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="subsection">
+                <h3><span class="emoji-title">🎯</span> 3.3 Final Results — The Complete Detection</h3>
+                <div class="intro-text">
+                    <p>The output combines class and location predictions:</p>
+                    <ul>
+                        <li>Only the <strong>most confident detections</strong> are kept.</li>
+                        <li>Overlapping boxes for the same object are merged through Non-Maximum Suppression (NMS).</li>
+                        <li>Each final detection includes a class label, confidence score, and precise bounding box.</li>
+                        <li>The image below shows the complete detection result.</li>
+                    </ul>
+                </div>
+                
+                <div class="image-container">
+                    <img id="detections-image" src="" alt="Final Detection Results">
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Store images data
+        let imageData = {
+            original: null,
+            detections: null,
+            heatmap: null
+        };
+        
+        // Store attention data
+        let attentionLayers = [];
+        let activeAttentionLayer = null;
+        let selectedQueryIdx = null;
+        let detection_results = null;
+        
+        // Mappings for label names and colors
+        let int_to_label = {};
+        let int_to_color = {};
+        let det_to_color = {};
+        
+        // Function to load label and color mappings
+        async function loadLabelMappings() {
+            try {
+                const response = await fetch('/api/label_mapping');
+                const data = await response.json();
+                
+                // Load label mapping
+                int_to_label = data.int_to_label || {};
+                
+                // Load detector color mapping
+                if (data.det_to_color) {
+                    Object.keys(data.det_to_color).forEach(key => {
+                        det_to_color[parseInt(key)] = data.det_to_color[key];
+                    });
+                    console.log(`Loaded ${Object.keys(det_to_color).length} detector colors from server`);
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Error loading label mappings:', error);
+                // Set up fallback colors
+                generateFallbackColors();
+                return false;
+            }
+        }
+        
+        // Generate fallback colors for all possible detection queries
+        function generateFallbackColors() {
+            console.log("Generating fallback colors");
+            
+            // Generate basic label mappings
+            for (let i = 0; i < 24; i++) {
+                int_to_label[i] = `Class ${i}`;
+            }
+            
+            // Generate detector colors for all possible queries (0-299)
+            for (let i = 0; i < 300; i++) {
+                det_to_color[i] = [
+                    Math.floor(Math.random() * 200 + 55),
+                    Math.floor(Math.random() * 200 + 55),
+                    Math.floor(Math.random() * 200 + 55)
+                ];
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log("DOM loaded, initializing...");
+            
+            // Step 1: Load label and color mappings first
+            await loadLabelMappings();
+            
+            // Step 2: Load image and detections
+            await loadImages();
+            
+            // Step 3: Load features data and attention layers
+            await loadFeaturesData();
+            
+            // Load attention visualization if available
+            if (attentionLayers.length > 0) {
+                initializeAttentionVisualization();
+            }
+            
+            // Set up event listeners
+            document.querySelectorAll('input[type="range"]').forEach(slider => {
+                slider.addEventListener('input', updateChannelValue);
+                slider.addEventListener('change', loadFeatureChannel);
+            });
+            
+            // Set up tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', switchTab);
+            });
+            
+            // Set up image upload functionality
+            setupImageUpload();
+        });
+        
+        // Set up image upload and camera functionality
+        function setupImageUpload() {
+            const fileInput = document.getElementById('image-upload');
+            const processButton = document.getElementById('process-button');
+            const uploadStatus = document.getElementById('upload-status');
+            const cameraButton = document.getElementById('camera-button');
+            const cameraModal = document.getElementById('camera-modal');
+            const closeCamera = document.getElementById('close-camera');
+            const cameraPreview = document.getElementById('camera-preview');
+            const cameraCanvas = document.getElementById('camera-canvas');
+            const captureButton = document.getElementById('capture-button');
+            const retryButton = document.getElementById('retry-button');
+            const usePhotoButton = document.getElementById('use-photo-button');
+            
+            let uploadedFile = null;
+            let stream = null;
+            
+            // File input change event
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // Check if the file is an image
+                if (!file.type.match('image.*')) {
+                    uploadStatus.innerHTML = '<span style="color: red;">Please select an image file</span>';
+                    return;
+                }
+                
+                // Show file name and enable process button
+                uploadStatus.textContent = `Selected: ${file.name}`;
+                uploadedFile = file;
+                processButton.style.display = 'inline-flex';
+            });
+            
+            // Camera button click event
+            cameraButton.addEventListener('click', async function() {
+                try {
+                    // Reset canvas display
+                    cameraCanvas.style.display = 'none';
+                    cameraPreview.style.display = 'block';
+                    captureButton.style.display = 'flex';
+                    retryButton.style.display = 'none';
+                    usePhotoButton.style.display = 'none';
+                    
+                    // Open camera modal
+                    cameraModal.style.display = 'block';
+                    
+                    // Access webcam
+                    stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'environment' }, 
+                        audio: false 
+                    });
+                    
+                    // Connect stream to video element
+                    cameraPreview.srcObject = stream;
+                } catch (error) {
+                    console.error('Error accessing camera:', error);
+                    uploadStatus.innerHTML = '<span style="color: red;">Could not access camera. Please check permissions.</span>';
+                    cameraModal.style.display = 'none';
+                }
+            });
+            
+            // Close camera button
+            closeCamera.addEventListener('click', function() {
+                stopCameraStream();
+                cameraModal.style.display = 'none';
+            });
+            
+            // Function to stop camera stream
+            function stopCameraStream() {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    stream = null;
+                }
+            }
+            
+            // Capture button click event
+            captureButton.addEventListener('click', function() {
+                // Set canvas dimensions to match video
+                const width = cameraPreview.videoWidth;
+                const height = cameraPreview.videoHeight;
+                cameraCanvas.width = width;
+                cameraCanvas.height = height;
+                
+                // Draw video frame to canvas
+                const context = cameraCanvas.getContext('2d');
+                context.drawImage(cameraPreview, 0, 0, width, height);
+                
+                // Show the captured image and control buttons
+                cameraPreview.style.display = 'none';
+                cameraCanvas.style.display = 'block';
+                captureButton.style.display = 'none';
+                retryButton.style.display = 'flex';
+                usePhotoButton.style.display = 'flex';
+            });
+            
+            // Retry button click event
+            retryButton.addEventListener('click', function() {
+                // Show video preview again
+                cameraPreview.style.display = 'block';
+                cameraCanvas.style.display = 'none';
+                captureButton.style.display = 'flex';
+                retryButton.style.display = 'none';
+                usePhotoButton.style.display = 'none';
+            });
+            
+            // Use photo button click event
+            usePhotoButton.addEventListener('click', function() {
+                // Convert canvas to blob
+                cameraCanvas.toBlob(function(blob) {
+                    // Create a File object from the blob
+                    const currentDate = new Date();
+                    const fileName = `camera_capture_${currentDate.getTime()}.png`;
+                    uploadedFile = new File([blob], fileName, { type: 'image/png' });
+                    
+                    // Update UI
+                    uploadStatus.textContent = `Camera capture: ${fileName}`;
+                    processButton.style.display = 'inline-flex';
+                    
+                    // Close camera modal and stop stream
+                    stopCameraStream();
+                    cameraModal.style.display = 'none';
+                }, 'image/png');
+            });
+            
+            // Process button click event
+            processButton.addEventListener('click', async function() {
+                if (!uploadedFile) return;
+                
+                // Show loading status
+                uploadStatus.innerHTML = '<span style="color: #4b6cb7;">Processing image...</span>';
+                processButton.disabled = true;
+                processButton.style.opacity = '0.7';
+                
+                // Create FormData object and append the file
+                const formData = new FormData();
+                formData.append('image', uploadedFile);
+                
+                try {
+                    // Upload the image to the server for processing
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+                    
+                    // Process the response
+                    uploadStatus.innerHTML = '<span style="color: green;">Image processed successfully!</span>';
+                    
+                    // Reload all images and visualizations
+                    await loadImages();
+                    await loadFeaturesData();
+                    
+                    // Reinitialize attention visualization if needed
+                    if (attentionLayers.length > 0) {
+                        initializeAttentionVisualization();
+                    }
+                    
+                } catch (error) {
+                    console.error('Error processing image:', error);
+                    uploadStatus.innerHTML = '<span style="color: red;">Error processing image. Please try again.</span>';
+                } finally {
+                    // Reset button state
+                    processButton.disabled = false;
+                    processButton.style.opacity = '1';
+                }
+            });
+        }
+        
+        function switchTab(event) {
+            // Get the parent container of the tab
+            const tabContainer = event.target.closest('.image-tabs');
+            
+            // Remove active class from all tabs in this container
+            tabContainer.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+            
+            // Show the corresponding image
+            const tabType = event.target.dataset.tab;
+            
+            // Determine which image container to update
+            if (tabContainer.nextElementSibling.querySelector('#display-image')) {
+                // This is the main image container
+                if (imageData[tabType]) {
+                    document.getElementById('display-image').src = imageData[tabType];
+                    
+                    // Also update the detections image in Stage 3 to match
+                    // If we're showing detections in the main view, also update the Stage 3 detections image
+                    const detectionsImage = document.getElementById('detections-image');
+                    if (detectionsImage) {
+                        if (tabType === 'detections') {
+                            // When detections tab is active, show detections in the Stage 3 section
+                            detectionsImage.src = imageData.detections;
+                        } else {
+                            // Otherwise still show detections in the Stage 3 section (it should always show detections)
+                            detectionsImage.src = imageData.detections;
+                        }
+                    }
+                }
+            } else if (tabContainer.nextElementSibling.querySelector('#heatmap-image')) {
+                // This is the heatmap container
+                document.getElementById('heatmap-image').src = imageData['heatmap'];
+            }
+        }
+        
+        async function loadImages() {
+            try {
+                const response = await fetch('/api/image');
+                const data = await response.json();
+                
+                // Convert hex strings to blob URLs for each image type
+                imageData.original = createImageUrl(data.original);
+                imageData.detections = createImageUrl(data.detections);
+                imageData.heatmap = createImageUrl(data.heatmap);
+                
+                // Store detection results for the attention visualization
+                if (data.detection_results) {
+                    detection_results = data.detection_results;
+                    console.log("Received detection results with", detection_results.detectors.length, "detections");
+                }
+                
+                // Show the default images
+                document.getElementById('display-image').src = imageData.original;
+                
+                // Set the heatmap image if it exists on the page
+                if (document.getElementById('heatmap-image')) {
+                    document.getElementById('heatmap-image').src = imageData.heatmap;
+                }
+                
+                // Set the detections image in the Stage 3 section if it exists
+                if (document.getElementById('detections-image')) {
+                    document.getElementById('detections-image').src = imageData.detections;
+                }
+            } catch (error) {
+                console.error('Error loading images:', error);
+            }
+        }
+        
+        function createImageUrl(hexString) {
+            // Convert hex to binary and create a blob URL
+            const binary = hexToArrayBuffer(hexString);
+            const blob = new Blob([binary], {type: 'image/png'});
+            return URL.createObjectURL(blob);
+        }
+        
+        let featuresData = {};
+        
+        async function loadFeaturesData() {
+            try {
+                const response = await fetch('/api/features');
+                const data = await response.json();
+                
+                featuresData = data.features_data;
+                
+                // Store attention layers if available
+                if (data.attention_layer_keys && data.attention_layer_keys.length > 0) {
+                    attentionLayers = data.attention_layer_keys;
+                }
+                
+                // Hide containers for modules that don't have data
+                for (const moduleKey of data.module_keys) {
+                    const container = document.getElementById(`${moduleKey}-container`);
+                    if (featuresData[moduleKey]) {
+                        // Show container and set up the channel slider
+                        container.style.display = 'block';
+                        
+                        const numChannels = featuresData[moduleKey].num_channels;
+                        
+                        // Update UI
+                        document.getElementById(`${moduleKey}-total`).textContent = numChannels - 1;
+                        
+                        // Set up channel range slider
+                        const channelRange = document.getElementById(`${moduleKey}-range`);
+                        channelRange.max = numChannels - 1;
+                        channelRange.value = 0;
+                        
+                        // Load first channel
+                        loadFeatureChannelForModule(moduleKey, 0);
+                    } else {
+                        // Hide container if no data
+                        container.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading features data:', error);
+            }
+        }
+        
+        function updateChannelValue(event) {
+            const slider = event.target;
+            const moduleKey = slider.dataset.module;
+            const channelValue = slider.value;
+            document.getElementById(`${moduleKey}-value`).textContent = channelValue;
+        }
+        
+        async function loadFeatureChannel(event) {
+            const slider = event.target;
+            const moduleKey = slider.dataset.module;
+            const channelIdx = slider.value;
+            
+            await loadFeatureChannelForModule(moduleKey, channelIdx);
+        }
+        
+        async function loadFeatureChannelForModule(moduleKey, channelIdx) {
+            try {
+                const response = await fetch(`/api/channel/${moduleKey}/${channelIdx}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Convert hex to binary and create a blob URL
+                const binary = hexToArrayBuffer(data.channel_data);
+                const blob = new Blob([binary], {type: 'image/png'});
+                const imageUrl = URL.createObjectURL(blob);
+                
+                document.getElementById(`${moduleKey}-image`).src = imageUrl;
+                
+                // Update stats
+                document.getElementById(`${moduleKey}-min`).textContent = data.min_val.toFixed(4);
+                document.getElementById(`${moduleKey}-max`).textContent = data.max_val.toFixed(4);
+                document.getElementById(`${moduleKey}-mean`).textContent = data.mean_val.toFixed(4);
+                document.getElementById(`${moduleKey}-shape`).textContent = `${data.shape.height}×${data.shape.width}`;
+            } catch (error) {
+                console.error(`Error loading feature channel for ${moduleKey}:`, error);
+            }
+        }
+        
+        // Helper function to convert hex string to ArrayBuffer
+        function hexToArrayBuffer(hex) {
+            const bytes = new Uint8Array(hex.length / 2);
+            for (let i = 0; i < hex.length; i += 2) {
+                bytes[i/2] = parseInt(hex.substr(i, 2), 16);
+            }
+            return bytes.buffer;
+        }
+        
+        // Initialize the attention visualization component
+        function initializeAttentionVisualization() {
+            console.log("Initializing attention visualization");
+            
+            // Make sure we have colors for all queries
+            if (Object.keys(det_to_color).length === 0) {
+                console.warn("Color mappings not loaded yet, generating fallback colors");
+                generateFallbackColors();
+            }
+            
+            // Ensure detection queries have special colors
+            if (detection_results && detection_results.detectors) {
+                detection_results.detectors.forEach((detectorId, idx) => {
+                    // Set a special color for this detector if not already set
+                    if (!det_to_color[detectorId]) {
+                        det_to_color[detectorId] = [
+                            Math.floor(Math.random() * 155 + 100),
+                            Math.floor(Math.random() * 155 + 100),
+                            Math.floor(Math.random() * 155 + 100)
+                        ];
+                    }
+                });
+            }
+            
+            console.log("Detector colors ready:", Object.keys(det_to_color).length);
+            
+            // Populate attention layer dropdown
+            const layerSelect = document.getElementById('attention-layer-select');
+            layerSelect.innerHTML = '';
+            
+            attentionLayers.forEach((layer, index) => {
+                const option = document.createElement('option');
+                option.value = layer;
+                option.textContent = `Layer ${index}`;
+                layerSelect.appendChild(option);
+            });
+            
+            // Set the first layer as active
+            if (attentionLayers.length > 0) {
+                activeAttentionLayer = attentionLayers[0];
+                layerSelect.value = activeAttentionLayer;
+            }
+            
+            // Set up event listener for layer selection
+            layerSelect.addEventListener('change', () => {
+                activeAttentionLayer = layerSelect.value;
+                generateQueryCircles();
+                clearAttentionLines();
+            });
+            
+            // Generate initial query circles
+            generateQueryCircles();
+            
+            // Clear any existing attention lines
+            clearAttentionLines();
+        }
+        
+        // Create and show custom tooltip
+        function createTooltip(element, text) {
+            // Remove existing tooltip if any
+            const existingTooltip = document.getElementById('custom-tooltip');
+            if (existingTooltip) {
+                document.body.removeChild(existingTooltip);
+            }
+            
+            // Create tooltip
+            const tooltip = document.createElement('div');
+            tooltip.id = 'custom-tooltip';
+            tooltip.className = 'query-tooltip';
+            tooltip.textContent = text;
+            
+            // Add to document
+            document.body.appendChild(tooltip);
+            
+            // Position tooltip
+            const rect = element.getBoundingClientRect();
+            tooltip.style.left = rect.left + window.scrollX + 'px';
+            tooltip.style.top = rect.top + window.scrollY - tooltip.offsetHeight - 5 + 'px';
+            
+            return tooltip;
+        }
+        
+        // Setup tooltip events for query circles
+        function setupTooltipEvents() {
+            // For all query circles
+            document.querySelectorAll('.query-circle').forEach(circle => {
+                // Show tooltip on mouseover
+                circle.addEventListener('mouseover', (e) => {
+                    const tooltipText = e.target.title || `Query #${e.target.getAttribute('data-query-idx')}`;
+                    if (tooltipText) {
+                        createTooltip(e.target, tooltipText);
+                    }
+                });
+                
+                // Hide tooltip on mouseout
+                circle.addEventListener('mouseout', () => {
+                    const tooltip = document.getElementById('custom-tooltip');
+                    if (tooltip) {
+                        document.body.removeChild(tooltip);
+                    }
+                });
+            });
+        }
+        
+        // Generate query circles for visualization
+        function generateQueryCircles() {
+            console.log("Generating query circles with detection results:", detection_results);
+            
+            // Clear existing query containers
+            const interactiveContainer = document.getElementById('interactive-queries-container');
+            const allQueriesContainer = document.getElementById('all-queries-container');
+            
+            if (!interactiveContainer || !allQueriesContainer) {
+                console.error("Could not find query containers");
+                return;
+            }
+            
+            interactiveContainer.innerHTML = '';
+            allQueriesContainer.innerHTML = '';
+            
+            // If we have detection results, use them to visualize attention
+            if (detection_results && detection_results.boxes && detection_results.boxes.length > 0) {
+                const numDetections = detection_results.boxes.length; // Get all detections
+                
+                // First create interactive detection queries for the top row
+                for (let i = 0; i < numDetections; i++) {
+                    const detectorId = detection_results.detectors[i];
+                    const label = detection_results.labels[i];
+                    
+                    // Create interactive query circle
+                    const interactiveCircle = document.createElement('div');
+                    interactiveCircle.className = 'query-circle interactive';
+                    interactiveCircle.setAttribute('data-query-idx', detectorId);
+                    
+                    // Style based on detector ID (using det_to_color)
+                    const size = '30px';
+                    let color = '#cccccc'; // Default gray
+                    
+                    // Use detector-based coloring from det_to_color
+                    if (det_to_color[detectorId] && Array.isArray(det_to_color[detectorId])) {
+                        color = `rgb(${det_to_color[detectorId][0]}, ${det_to_color[detectorId][1]}, ${det_to_color[detectorId][2]})`;
+                    }
+                    
+                    interactiveCircle.style.width = size;
+                    interactiveCircle.style.height = size;
+                    interactiveCircle.style.borderRadius = '50%';
+                    interactiveCircle.style.backgroundColor = color;
+                    interactiveCircle.style.margin = '5px';
+                    interactiveCircle.style.cursor = 'pointer';
+                    interactiveCircle.style.display = 'inline-block';
+                    interactiveCircle.style.position = 'relative';
+                    interactiveCircle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                    
+                    // Add title attribute for showing label on hover
+                    const labelName = int_to_label[label] || `Class ${label}`;
+                    interactiveCircle.title = `${labelName} (Detector #${detectorId})`;
+                    
+                    // Add data attributes for additional information
+                    interactiveCircle.setAttribute('data-label', label);
+                    interactiveCircle.setAttribute('data-detector', detectorId);
+                    
+                    // No label text is added to keep visualization clean
+                    
+                    // Add click event to show attention weights
+                    interactiveCircle.addEventListener('click', async (e) => {
+                        clearAttentionLines(); // First clear any existing connections
+                        
+                        const queryIdx = parseInt(e.currentTarget.getAttribute('data-query-idx'));
+                        selectedQueryIdx = queryIdx;
+                        
+                        // Remove selected class from all circles
+                        document.querySelectorAll('.query-circle.selected').forEach(el => {
+                            el.classList.remove('selected');
+                        });
+                        
+                        // Mark this circle as selected
+                        e.currentTarget.classList.add('selected');
+                        
+                        // Add visual feedback for clicked circle
+                        e.currentTarget.style.boxShadow = '0 0 10px rgba(255,255,255,0.8)';
+                        
+                        console.log(`Loading attention weights for query ${queryIdx} from layer ${activeAttentionLayer}`);
+                        
+                        // Load attention connections in the visualization
+                        await loadAttentionWeights(activeAttentionLayer, queryIdx);
+                        
+                        // Also update the heatmap with stars for the connected queries
+                        await updateHeatmapWithConnections(activeAttentionLayer, queryIdx);
+                    });
+                    
+                    interactiveContainer.appendChild(interactiveCircle);
+                }
+                
+                // Now create all 300 query circles for the bottom row
+                for (let i = 0; i < 300; i++) {
+                    const allQueryCircle = document.createElement('div');
+                    allQueryCircle.className = 'query-circle all';
+                    allQueryCircle.setAttribute('data-query-idx', i);
+                    
+                    // Find if this query is a detection query by checking if it's in the detectors array
+                    const detectors = detection_results.detectors.map(d => Number(d)); // Ensure numeric comparison
+                    const detectionIndex = detectors.indexOf(i);
+                    
+                    // Style query circles based on whether they're detection queries or not
+                    const size = '12px';
+                    let color = '#cccccc'; // Default gray for non-detection queries
+                    
+                    if (detectionIndex !== -1) {
+                        // This is a detection query, color it using det_to_color by detector ID
+                        const detectorId = detection_results.detectors[detectionIndex];
+                        if (det_to_color[detectorId] && Array.isArray(det_to_color[detectorId])) {
+                            color = `rgb(${det_to_color[detectorId][0]}, ${det_to_color[detectorId][1]}, ${det_to_color[detectorId][2]})`;
+                        }
+                    }
+                    
+                    allQueryCircle.style.width = size;
+                    allQueryCircle.style.height = size;
+                    allQueryCircle.style.borderRadius = '50%';
+                    allQueryCircle.style.backgroundColor = color;
+                    allQueryCircle.style.margin = '2px';
+                    allQueryCircle.style.display = 'inline-block';
+                    
+                    // Add tooltip for hover
+                    let tooltipText = `Query #${i}`;
+                    
+                    // If this is a detection query, add more info
+                    if (detectionIndex !== -1) {
+                        const label = detection_results.labels[detectionIndex];
+                        const labelName = int_to_label[label] || `Class ${label}`;
+                        tooltipText = `${labelName} (Detector #${i})`;
+                    }
+                    
+                    allQueryCircle.title = tooltipText;
+                    
+                    allQueriesContainer.appendChild(allQueryCircle);
+                }
+            }
+            
+            // Setup tooltips after all circles are generated
+            setTimeout(() => {
+                setupTooltipEvents();
+            }, 100);
+        }
+        
+        // Load attention weights for a specific query
+        async function loadAttentionWeights(layerKey, queryIdx) {
+            try {
+                clearAttentionLines(); // Clear existing lines
+                
+                const response = await fetch(`/api/attention/${layerKey}/${queryIdx}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                drawAttentionLines(data.attention_weights);
+                
+            } catch (error) {
+                console.error('Error loading attention weights:', error);
+            }
+        }
+        
+        // Draw attention lines based on weights
+        function drawAttentionLines(weights) {
+            console.log("Drawing attention lines with weights:", weights.length);
+            
+            // Get SVG and containers
+            const svg = document.getElementById('attention-lines');
+            const interactiveContainer = document.getElementById('interactive-queries-container');
+            const allQueriesContainer = document.getElementById('all-queries-container');
+            
+            // Clear any existing lines
+            svg.innerHTML = '';
+            
+            // Validate required elements
+            if (!svg || !interactiveContainer || !allQueriesContainer) {
+                console.error("Could not find required elements for drawing attention lines");
+                return;
+            }
+            
+            // Get the source query circle (the one that was clicked)
+            const sourceCircle = interactiveContainer.querySelector(`.query-circle.selected`);
+            if (!sourceCircle) {
+                console.error("No source query circle selected");
+                return;
+            }
+            
+            // Set a threshold to only show significant connections
+            const maxWeight = Math.max(...weights);
+            if (maxWeight <= 0) {
+                console.error("No significant weights found");
+                return;
+            }
+            
+            const threshold = maxWeight * 0.05; // Show connections with ≥ 5% of max weight
+            
+            // Get the selected query ID
+            const selectedQueryId = parseInt(sourceCircle.getAttribute('data-query-idx'));
+            console.log("Selected query ID:", selectedQueryId);
+            
+            // Get positions relative to the SVG element
+            const svgRect = svg.getBoundingClientRect();
+            const sourceRect = sourceCircle.getBoundingClientRect();
+            
+            // Calculate source circle center
+            const sourceX = sourceRect.left - svgRect.left + sourceRect.width/2;
+            const sourceY = sourceRect.top - svgRect.top + sourceRect.height/2;
+            
+            // Draw lines to all query circles with significant attention
+            const allQueryCircles = allQueriesContainer.querySelectorAll('.query-circle.all');
+            console.log("Found all-query circles:", allQueryCircles.length);
+            
+            let visibleConnectionCount = 0;
+            
+            // First pass - highlight the corresponding target circle
+            allQueryCircles.forEach((targetCircle, idx) => {
+                if (idx >= weights.length) return;
+                
+                const targetId = parseInt(targetCircle.getAttribute('data-query-idx'));
+                if (targetId === selectedQueryId) {
+                    targetCircle.style.border = '2px solid white';
+                    targetCircle.style.boxShadow = '0 0 5px rgba(255,255,255,0.8)';
+                }
+            });
+            
+            // Second pass - draw all connection lines
+            allQueryCircles.forEach((targetCircle, idx) => {
+                if (idx >= weights.length) return;
+                
+                const weight = weights[idx];
+                if (weight < threshold) return; // Skip weak connections
+                
+                // Get target position
+                const targetRect = targetCircle.getBoundingClientRect();
+                const targetX = targetRect.left - svgRect.left + targetRect.width/2;
+                const targetY = targetRect.top - svgRect.top + targetRect.height/2;
+                
+                // Create the connection line
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                
+                // Set line coordinates
+                line.setAttribute('x1', sourceX);
+                line.setAttribute('y1', sourceY);
+                line.setAttribute('x2', targetX);
+                line.setAttribute('y2', targetY);
+                
+                // Scale the stroke width based on weight
+                const maxStrokeWidth = 3;
+                const strokeWidth = Math.max(0.5, (weight / maxWeight) * maxStrokeWidth);
+                line.setAttribute('stroke-width', strokeWidth);
+                
+                // Color the line based on weight
+                const opacity = Math.max(0.2, weight / maxWeight);
+                line.setAttribute('stroke', `rgba(255, 215, 0, ${opacity})`);
+                
+                // Add line to SVG
+                svg.appendChild(line);
+                visibleConnectionCount++;
+            });
+            
+            console.log(`Visualizing ${visibleConnectionCount} significant connections`);
+        }
+        
+        // Clear all attention visualization lines and highlighting
+        function clearAttentionLines() {
+            // Clear SVG content
+            const svg = document.getElementById('attention-lines');
+            if (svg) svg.innerHTML = '';
+            
+            // Reset all query circles in the bottom row
+            const allQueryCircles = document.querySelectorAll('.query-circle.all');
+            if (allQueryCircles) {
+                allQueryCircles.forEach(circle => {
+                    circle.style.border = 'none';
+                    circle.style.boxShadow = 'none';
+                });
+            }
+            
+            // Reset all interactive circles in the top row
+            const interactiveCircles = document.querySelectorAll('.query-circle.interactive');
+            if (interactiveCircles) {
+                interactiveCircles.forEach(circle => {
+                    if (!circle.classList.contains('selected')) {
+                        circle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                    }
+                });
+            }
+            
+            // Reset heatmap to original version
+            if (imageData.heatmap && document.getElementById('heatmap-image')) {
+                document.getElementById('heatmap-image').src = imageData.heatmap;
+            }
+            
+            selectedQueryIdx = null;
+        }
+        
+        // Update the heatmap to show connections with stars
+        async function updateHeatmapWithConnections(layerKey, queryIdx) {
+            try {
+                // Check if there's a heatmap image to update
+                const heatmapImage = document.getElementById('heatmap-image');
+                if (!heatmapImage) return;
+                
+                console.log(`Updating heatmap with highlights for query ${queryIdx}`);
+                
+                // Fetch the highlighted heatmap
+                const response = await fetch(`/api/highlighted_heatmap/${layerKey}/${queryIdx}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error:', data.error);
+                    return;
+                }
+                
+                // Update the heatmap image with the highlighted version
+                if (data.heatmap) {
+                    const binary = hexToArrayBuffer(data.heatmap);
+                    const blob = new Blob([binary], {type: 'image/png'});
+                    const highlightedUrl = URL.createObjectURL(blob);
+                    
+                    heatmapImage.src = highlightedUrl;
+                    console.log("Heatmap updated with highlights");
+                }
+            } catch (error) {
+                console.error('Error updating heatmap with connections:', error);
+            }
+        }
+    </script>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <span>Smart Minds</span>
+                </div>
+                <p>Computer Vision technology with advanced AI-powered solutions.</p>
+            </div>
+            
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/drone">Drone</a></li>
+                    <li><a href="/features">Features</a></li>
+                    <li><a href="/detection">Detection</a></li>
+                    <li><a href="/model">Model</a></li>
+                    <li><a href="/about">About Us</a></li>
+                </ul>
+            </div>
+            
+        </div>
+    </footer>
+    
+    <div class="copyright">
+        &copy; 2025 Smart Minds. All rights reserved.
+    </div>
+</body>
+</html>

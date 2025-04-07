@@ -415,7 +415,7 @@ def get_proposals_heatmap_overlay(image):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('features.html')
 
 @app.route('/api/image')
 def get_image():

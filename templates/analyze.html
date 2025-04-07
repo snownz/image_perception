@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Minds - Dataset Analysis</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        :root {
+            --primary-dark-blue: #0a2342;
+            --primary-dark-green: #1d5c4d;
+            --accent-blue: #2d6ecc;
+            --accent-green: #25a18e;
+            --light-text: #f0f5fa;
+            --dark-text: #1a1a1a;
+            --card-bg: rgba(255, 255, 255, 0.08);
+            --header-bg: rgba(13, 31, 61, 0.95);
+            --overlay-bg: rgba(10, 35, 66, 0.6);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary-dark-blue) 0%, var(--primary-dark-green) 100%);
+            color: var(--light-text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background-color: var(--header-bg);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .logo i {
+            color: var(--accent-green);
+            margin-right: 0.5rem;
+            font-size: 1.8rem;
+        }
+        
+        .logo span {
+            background: linear-gradient(90deg, #25a18e, #2d6ecc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+        
+        .nav-links a {
+            color: var(--light-text);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: color 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            color: var(--accent-green);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .main-title {
+            margin-bottom: 2.5rem;
+            text-align: center;
+        }
+        
+        .main-title h1 {
+            font-size: 2.8rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        
+        .main-title p {
+            font-size: 1.2rem;
+            color: rgba(240, 245, 250, 0.85);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .tab-panel {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 2rem;
+        }
+        
+        .tab-navigation {
+            display: flex;
+            background-color: rgba(13, 31, 61, 0.6);
+        }
+        
+        .tab-button {
+            padding: 1rem 2rem;
+            background: none;
+            border: none;
+            color: var(--light-text);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s;
+            flex: 1;
+            text-align: center;
+        }
+        
+        .tab-button:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .tab-button.active {
+            background-color: var(--accent-green);
+            color: var(--dark-text);
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 2rem;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+        }
+        
+        .stat-title {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: var(--accent-green);
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-description {
+            font-size: 0.9rem;
+            color: rgba(240, 245, 250, 0.7);
+        }
+        
+        .chart-container {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-title {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--light-text);
+        }
+        
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 2rem;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border-spacing: 0;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        th {
+            background-color: rgba(13, 31, 61, 0.6);
+            color: var(--accent-green);
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+        }
+        
+        tr:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+        
+        .loader i {
+            font-size: 2rem;
+            color: var(--accent-green);
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .footer {
+            background-color: rgba(10, 35, 66, 0.9);
+            padding: 3rem 0;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .footer-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .footer-logo {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .footer-logo .logo {
+            margin-bottom: 1rem;
+        }
+        
+        .footer-logo p {
+            max-width: 400px;
+            color: rgba(240, 245, 250, 0.7);
+            font-size: 0.9rem;
+        }
+        
+        .footer-links h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .footer-links ul {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .footer-links a {
+            color: rgba(240, 245, 250, 0.7);
+            text-decoration: none;
+            transition: color 0.3s ease;
+            font-size: 0.9rem;
+        }
+        
+        .footer-links a:hover {
+            color: var(--accent-green);
+        }
+        
+        .copyright {
+            text-align: center;
+            padding: 1.5rem 0;
+            color: rgba(240, 245, 250, 0.6);
+            font-size: 0.9rem;
+            background-color: rgba(8, 28, 53, 0.95);
+        }
+        
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .heatmap-item {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .heatmap-item img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+        
+        .heatmap-title {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: var(--accent-green);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                padding: 1rem;
+            }
+            
+            .logo {
+                margin-bottom: 1rem;
+            }
+            
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .tab-button {
+                padding: 0.75rem 1rem;
+                font-size: 0.9rem;
+            }
+            
+            .main-title h1 {
+                font-size: 2rem;
+            }
+            
+            .main-title p {
+                font-size: 1rem;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                gap: 2rem;
+                text-align: center;
+            }
+            
+            .footer-logo {
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-brain"></i>
+                <span>Smart Minds</span>
+            </div>
+            <nav class="nav-links">
+                <a href="/">Home</a>
+                <a href="/drone">Drone</a>
+                <a href="/features">Features</a>
+                <a href="/detection">Detection</a>
+                <a href="/model">Model</a>
+                <a href="/analyze">Dataset Analysis</a>
+                <a href="/about">About Us</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Main Title -->
+        <div class="main-title">
+            <h1>Dataset Analysis Dashboard</h1>
+            <p>Comprehensive analysis of training and validation datasets for object detection</p>
+        </div>
+        
+        <!-- Tab Panel -->
+        <div class="tab-panel">
+            <div class="tab-navigation">
+                <button class="tab-button active" data-tab="train">Training Dataset</button>
+                <button class="tab-button" data-tab="val">Validation Dataset</button>
+            </div>
+            
+            <!-- Training Dataset Tab -->
+            <div id="train" class="tab-content active">
+                <div class="loader" id="train-loader">
+                    <i class="fas fa-spinner"></i>
+                </div>
+                
+                <div class="stats-container" id="train-stats" style="display: none;">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Images</div>
+                        <div class="stat-value" id="train-total-images">0</div>
+                        <div class="stat-description">Images in training set</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Total Classes</div>
+                        <div class="stat-value" id="train-total-classes">0</div>
+                        <div class="stat-description">Object categories</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Avg Detections Per Image</div>
+                        <div class="stat-value" id="train-avg-detections">0</div>
+                        <div class="stat-description">Objects per image</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Max Detections</div>
+                        <div class="stat-value" id="train-max-detections">0</div>
+                        <div class="stat-description">Maximum objects in one image</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container" id="train-class-dist" style="display: none;">
+                    <h3 class="chart-title">Class Distribution</h3>
+                    <div id="train-class-chart" style="height: 500px;"></div>
+                </div>
+                
+                <div class="chart-container" id="train-detect-dist" style="display: none;">
+                    <h3 class="chart-title">Distribution of Detections Per Image</h3>
+                    <div id="train-detection-chart" style="height: 400px;"></div>
+                </div>
+                
+                <div class="chart-container" id="train-class-div" style="display: none;">
+                    <h3 class="chart-title">Class Diversity Across Images</h3>
+                    <div id="train-diversity-chart" style="height: 400px;"></div>
+                </div>
+                
+                <div class="chart-container" id="train-heatmaps" style="display: none;">
+                    <h3 class="chart-title">Spatial Distribution Heatmaps</h3>
+                    <p>These heatmaps show where different object classes appear most frequently in the images:</p>
+                    <div class="heatmap-grid" id="train-heatmap-grid"></div>
+                </div>
+                
+                <div class="table-container" id="train-table" style="display: none;">
+                    <h3 class="chart-title">Class Statistics</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Class Name</th>
+                                <th>Total Instances</th>
+                                <th>Images Containing</th>
+                                <th>Dataset Coverage (%)</th>
+                                <th>Avg Per Image</th>
+                            </tr>
+                        </thead>
+                        <tbody id="train-table-body">
+                            <!-- Table rows will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Validation Dataset Tab -->
+            <div id="val" class="tab-content">
+                <div class="loader" id="val-loader">
+                    <i class="fas fa-spinner"></i>
+                </div>
+                
+                <div class="stats-container" id="val-stats" style="display: none;">
+                    <div class="stat-card">
+                        <div class="stat-title">Total Images</div>
+                        <div class="stat-value" id="val-total-images">0</div>
+                        <div class="stat-description">Images in validation set</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Total Classes</div>
+                        <div class="stat-value" id="val-total-classes">0</div>
+                        <div class="stat-description">Object categories</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Avg Detections Per Image</div>
+                        <div class="stat-value" id="val-avg-detections">0</div>
+                        <div class="stat-description">Objects per image</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">Max Detections</div>
+                        <div class="stat-value" id="val-max-detections">0</div>
+                        <div class="stat-description">Maximum objects in one image</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container" id="val-class-dist" style="display: none;">
+                    <h3 class="chart-title">Class Distribution</h3>
+                    <div id="val-class-chart" style="height: 500px;"></div>
+                </div>
+                
+                <div class="chart-container" id="val-detect-dist" style="display: none;">
+                    <h3 class="chart-title">Distribution of Detections Per Image</h3>
+                    <div id="val-detection-chart" style="height: 400px;"></div>
+                </div>
+                
+                <div class="chart-container" id="val-class-div" style="display: none;">
+                    <h3 class="chart-title">Class Diversity Across Images</h3>
+                    <div id="val-diversity-chart" style="height: 400px;"></div>
+                </div>
+                
+                <div class="chart-container" id="val-heatmaps" style="display: none;">
+                    <h3 class="chart-title">Spatial Distribution Heatmaps</h3>
+                    <p>These heatmaps show where different object classes appear most frequently in the images:</p>
+                    <div class="heatmap-grid" id="val-heatmap-grid"></div>
+                </div>
+                
+                <div class="table-container" id="val-table" style="display: none;">
+                    <h3 class="chart-title">Class Statistics</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Class Name</th>
+                                <th>Total Instances</th>
+                                <th>Images Containing</th>
+                                <th>Dataset Coverage (%)</th>
+                                <th>Avg Per Image</th>
+                            </tr>
+                        </thead>
+                        <tbody id="val-table-body">
+                            <!-- Table rows will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <span>Smart Minds</span>
+                </div>
+                <p>Pioneering the future of intelligent surveillance and drone technology with advanced AI-powered solutions.</p>
+            </div>
+            
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/drone">Drone</a></li>
+                    <li><a href="/features">Features</a></li>
+                    <li><a href="/detection">Detection</a></li>
+                    <li><a href="/model">Model</a></li>
+                    <li><a href="/analyze">Dataset Analysis</a></li>
+                    <li><a href="/about">About Us</a></li>
+                </ul>
+            </div>
+            
+            <div class="footer-links">
+                <h3>Solutions</h3>
+                <ul>
+                    <li><a href="/drone">Drone Surveillance</a></li>
+                    <li><a href="/detection">Object Recognition</a></li>
+                    <li><a href="/features">Neural Network Visualization</a></li>
+                    <li><a href="/model">Model Architecture</a></li>
+                    <li><a href="/analyze">Dataset Analysis</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+    
+    <div class="copyright">
+        &copy; 2023 Smart Minds. All rights reserved.
+    </div>
+    
+    <script>
+        // Tab functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+            
+            tabButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const tabId = this.getAttribute('data-tab');
+                    
+                    // Update active button
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update active content
+                    tabContents.forEach(content => {
+                        content.classList.remove('active');
+                        if (content.id === tabId) {
+                            content.classList.add('active');
+                        }
+                    });
+                    
+                    // Load data if not already loaded
+                    if (tabId === 'train' && !window.trainDataLoaded) {
+                        loadTrainingData();
+                    } else if (tabId === 'val' && !window.valDataLoaded) {
+                        loadValidationData();
+                    }
+                });
+            });
+            
+            // Load training data by default
+            loadTrainingData();
+        });
+        
+        // Data loading functions
+        function loadTrainingData() {
+            if (window.trainDataLoaded) return;
+            
+            document.getElementById('train-loader').style.display = 'flex';
+            
+            fetch('/api/analyze/train')
+                .then(response => response.json())
+                .then(data => {
+                    displayDatasetStats('train', data);
+                    window.trainDataLoaded = true;
+                })
+                .catch(error => {
+                    console.error('Error loading training data:', error);
+                    alert('Error loading training data. Please try again.');
+                })
+                .finally(() => {
+                    document.getElementById('train-loader').style.display = 'none';
+                });
+        }
+        
+        function loadValidationData() {
+            if (window.valDataLoaded) return;
+            
+            document.getElementById('val-loader').style.display = 'flex';
+            
+            fetch('/api/analyze/val')
+                .then(response => response.json())
+                .then(data => {
+                    displayDatasetStats('val', data);
+                    window.valDataLoaded = true;
+                })
+                .catch(error => {
+                    console.error('Error loading validation data:', error);
+                    alert('Error loading validation data. Please try again.');
+                })
+                .finally(() => {
+                    document.getElementById('val-loader').style.display = 'none';
+                });
+        }
+        
+        // Display dataset statistics
+        function displayDatasetStats(mode, data) {
+            // Update basic stats
+            document.getElementById(`${mode}-total-images`).textContent = data.total_images;
+            document.getElementById(`${mode}-total-classes`).textContent = data.classes.length;
+            document.getElementById(`${mode}-avg-detections`).textContent = data.avg_detections.toFixed(2);
+            document.getElementById(`${mode}-max-detections`).textContent = data.max_detections;
+            
+            // Show stats container
+            document.getElementById(`${mode}-stats`).style.display = 'grid';
+            
+            // Create class distribution chart
+            createClassDistributionChart(mode, data.class_stats);
+            document.getElementById(`${mode}-class-dist`).style.display = 'block';
+            
+            // Create detection distribution chart
+            createDetectionDistributionChart(mode, data.detection_distribution);
+            document.getElementById(`${mode}-detect-dist`).style.display = 'block';
+            
+            // Create class diversity chart
+            createClassDiversityChart(mode, data.class_diversity);
+            document.getElementById(`${mode}-class-div`).style.display = 'block';
+            
+            // Create spatial heatmaps
+            createSpatialHeatmaps(mode, data.spatial_heatmaps);
+            document.getElementById(`${mode}-heatmaps`).style.display = 'block';
+            
+            // Populate class statistics table
+            populateClassTable(mode, data.class_stats, data.total_images);
+            document.getElementById(`${mode}-table`).style.display = 'block';
+        }
+        
+        function createSpatialHeatmaps(mode, heatmapData) {
+            const container = document.getElementById(`${mode}-heatmap-grid`);
+            container.innerHTML = '';
+            
+            // First add the combined heatmap if it exists (make it larger)
+            if (heatmapData['__all__']) {
+                const combinedContainer = document.createElement('div');
+                combinedContainer.className = 'heatmap-item';
+                combinedContainer.style.gridColumn = '1 / -1'; // Make it span full width
+                combinedContainer.style.maxWidth = '400px';
+                combinedContainer.style.margin = '0 auto 20px auto';
+                
+                const img = document.createElement('img');
+                img.src = `data:image/png;base64,${heatmapData['__all__']}`;
+                img.alt = 'Combined spatial distribution of all objects';
+                img.style.width = '100%';
+                combinedContainer.appendChild(img);
+                
+                const title = document.createElement('div');
+                title.className = 'heatmap-title';
+                title.textContent = 'All Objects (Combined Density)';
+                title.style.fontSize = '1.1rem';
+                combinedContainer.appendChild(title);
+                
+                container.appendChild(combinedContainer);
+                
+                // Add a divider
+                const divider = document.createElement('hr');
+                divider.style.gridColumn = '1 / -1';
+                divider.style.margin = '20px 0';
+                divider.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                container.appendChild(divider);
+                
+                // Add a subtitle for individual classes
+                const subtitle = document.createElement('h4');
+                subtitle.textContent = 'Individual Class Distributions';
+                subtitle.style.gridColumn = '1 / -1';
+                subtitle.style.margin = '0 0 15px 0';
+                subtitle.style.color = 'var(--accent-blue)';
+                container.appendChild(subtitle);
+            }
+            
+            // Sort class names alphabetically and filter out the combined one
+            const classNames = Object.keys(heatmapData)
+                .filter(name => name !== '__all__')
+                .sort();
+            
+            for (const className of classNames) {
+                const base64Image = heatmapData[className];
+                
+                // Create container for this heatmap
+                const heatmapItem = document.createElement('div');
+                heatmapItem.className = 'heatmap-item';
+                
+                // Create image
+                const img = document.createElement('img');
+                img.src = `data:image/png;base64,${base64Image}`;
+                img.alt = `Spatial distribution of ${className}`;
+                heatmapItem.appendChild(img);
+                
+                // Create title
+                const title = document.createElement('div');
+                title.className = 'heatmap-title';
+                title.textContent = className;
+                heatmapItem.appendChild(title);
+                
+                container.appendChild(heatmapItem);
+            }
+            
+            // If no class-specific heatmaps, show a message
+            if (classNames.length === 0 && !heatmapData['__all__']) {
+                const message = document.createElement('p');
+                message.textContent = 'No spatial distribution data available.';
+                message.style.textAlign = 'center';
+                message.style.gridColumn = '1 / -1';
+                message.style.padding = '20px';
+                container.appendChild(message);
+            }
+        }
+        
+        function createClassDistributionChart(mode, classStats) {
+            const classes = classStats.map(stat => stat.class);
+            const counts = classStats.map(stat => stat.total);
+            
+            // Class distribution bar chart
+            Plotly.newPlot(`${mode}-class-chart`, [{
+                x: classes,
+                y: counts,
+                type: 'bar',
+                marker: {
+                    color: 'rgba(37, 161, 142, 0.8)',
+                    line: {
+                        color: 'rgba(37, 161, 142, 1.0)',
+                        width: 1.5
+                    }
+                },
+                text: counts.map(String),
+                textposition: 'auto'
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {
+                    color: 'rgba(240, 245, 250, 0.85)'
+                },
+                xaxis: {
+                    title: 'Class',
+                    tickangle: -45
+                },
+                yaxis: {
+                    title: 'Total Count',
+                    gridcolor: 'rgba(255, 255, 255, 0.1)'
+                },
+                margin: { t: 10, b: 120 }
+            });
+        }
+        
+        function createDetectionDistributionChart(mode, distribution) {
+            const detections = distribution.map(item => item.detections);
+            const counts = distribution.map(item => item.images);
+            
+            Plotly.newPlot(`${mode}-detection-chart`, [{
+                x: detections,
+                y: counts,
+                type: 'bar',
+                marker: {
+                    color: 'rgba(45, 110, 204, 0.8)',
+                    line: {
+                        color: 'rgba(45, 110, 204, 1.0)',
+                        width: 1.5
+                    }
+                },
+                text: counts.map(String),
+                textposition: 'auto'
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {
+                    color: 'rgba(240, 245, 250, 0.85)'
+                },
+                xaxis: {
+                    title: 'Number of Detections',
+                    tickmode: 'linear',
+                    dtick: 1
+                },
+                yaxis: {
+                    title: 'Number of Images',
+                    gridcolor: 'rgba(255, 255, 255, 0.1)'
+                },
+                margin: { t: 10 }
+            });
+        }
+        
+        function createClassDiversityChart(mode, diversity) {
+            const classCount = diversity.map(item => item.unique_classes);
+            const imageCount = diversity.map(item => item.images);
+            
+            Plotly.newPlot(`${mode}-diversity-chart`, [{
+                x: classCount,
+                y: imageCount,
+                type: 'bar',
+                marker: {
+                    color: 'rgba(255, 153, 0, 0.8)',
+                    line: {
+                        color: 'rgba(255, 153, 0, 1.0)',
+                        width: 1.5
+                    }
+                },
+                text: imageCount.map(String),
+                textposition: 'auto'
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {
+                    color: 'rgba(240, 245, 250, 0.85)'
+                },
+                xaxis: {
+                    title: 'Number of Unique Classes per Image',
+                    tickmode: 'linear',
+                    dtick: 1
+                },
+                yaxis: {
+                    title: 'Number of Images',
+                    gridcolor: 'rgba(255, 255, 255, 0.1)'
+                },
+                margin: { t: 10 }
+            });
+        }
+        
+        function populateClassTable(mode, classStats, totalImages) {
+            const tableBody = document.getElementById(`${mode}-table-body`);
+            tableBody.innerHTML = '';
+            
+            classStats.forEach(stat => {
+                const row = document.createElement('tr');
+                
+                const classCell = document.createElement('td');
+                classCell.textContent = stat.class;
+                row.appendChild(classCell);
+                
+                const totalCell = document.createElement('td');
+                totalCell.textContent = stat.total;
+                row.appendChild(totalCell);
+                
+                const imagesCell = document.createElement('td');
+                imagesCell.textContent = stat.images;
+                row.appendChild(imagesCell);
+                
+                const coverageCell = document.createElement('td');
+                coverageCell.textContent = `${stat.percentage.toFixed(2)}%`;
+                row.appendChild(coverageCell);
+                
+                const avgCell = document.createElement('td');
+                avgCell.textContent = stat.avg_per_image.toFixed(2);
+                row.appendChild(avgCell);
+                
+                tableBody.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
