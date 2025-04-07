@@ -520,6 +520,10 @@ detection_lock = threading.Lock()
 drone_threads_running = False
 rtmp_thread = None
 detect_thread = None
+thread_control_lock = threading.Lock()
+
+# Explicit exit event for thread termination
+detection_thread_exit_event = threading.Event()
 
 class RTMPReader:
     def __init__(self, rtmp_url: str, reconnect_delay: float = 2.0, max_retries: int = -1):
@@ -596,7 +600,7 @@ class RTMPReader:
 
 # Thread function for capturing frames from RTMP
 def rtmp_reader_thread(rtmp_url: str):
-    global latest_frame, frame_lock, drone_threads_running
+    global latest_frame, frame_lock, drone_threads_running, detection_thread_exit_event
     
     reader = RTMPReader(rtmp_url, reconnect_delay=2.0, max_retries=-1)
     reader.running = True
@@ -605,14 +609,34 @@ def rtmp_reader_thread(rtmp_url: str):
     
     last_frame_time = time.time()
     try:
-        while reader.running and drone_threads_running:
-            # Read frame with automatic reconnection handling
-            ret, frame = reader.read()
+        while reader.running and drone_threads_running and not detection_thread_exit_event.is_set():
+            # Check for stop signal
+            if not drone_threads_running or detection_thread_exit_event.is_set():
+                print("RTMP thread received stop signal")
+                break
+                
+            # Read frame with automatic reconnection handling with timeout
+            try:
+                ret, frame = reader.read()
+            except Exception as e:
+                print(f"Error reading frame: {e}")
+                # Check for stop signal before waiting
+                if not drone_threads_running or detection_thread_exit_event.is_set():
+                    break
+                time.sleep(0.5)
+                continue
             
             if not ret or frame is None:
                 print("Failed to retrieve frame after reconnection attempts.")
-                time.sleep(1)
+                # Check for stop signal before waiting
+                if not drone_threads_running or detection_thread_exit_event.is_set():
+                    break
+                time.sleep(0.5)
                 continue
+            
+            # Check for stop signal again after potentially long operations
+            if not drone_threads_running or detection_thread_exit_event.is_set():
+                break
             
             # Compute FPS
             current_time = time.time()
@@ -625,9 +649,12 @@ def rtmp_reader_thread(rtmp_url: str):
             
             # Update latest frame with lock
             with frame_lock:
-                global latest_frame
                 latest_frame = frame.copy()
             
+            # Check for stop signal before queue operations
+            if not drone_threads_running or detection_thread_exit_event.is_set():
+                break
+                
             # Clear queue if it's getting full to avoid backlog
             if frame_queue.qsize() > 3:  # If more than 3 frames are waiting
                 try:
@@ -645,6 +672,10 @@ def rtmp_reader_thread(rtmp_url: str):
                 # If still full after clearing, skip this frame
                 pass
             
+            # Check for stop signal before waiting
+            if not drone_threads_running or detection_thread_exit_event.is_set():
+                break
+                
             # Throttle capture rate to reduce CPU usage
             time.sleep(0.01)  # Adjust for desired capture rate
             
@@ -653,10 +684,19 @@ def rtmp_reader_thread(rtmp_url: str):
     finally:
         print("Stopping RTMP reader thread")
         reader.release()
+        
+        # Clear the frame
+        with frame_lock:
+            latest_frame = None
+            
+        print("RTMP thread has exited")
 
 # Thread function for object detection
 def detection_thread():
-    global latest_detections, detection_lock, drone_threads_running
+    global latest_detections, detection_lock, drone_threads_running, detection_thread_exit_event
+    
+    # Clear the exit event when starting the thread
+    detection_thread_exit_event.clear()
     
     detector = ObjectDetector()
     detector.running = True
@@ -664,46 +704,81 @@ def detection_thread():
     print("Starting object detection thread")
     
     try:
-        while detector.running and drone_threads_running:
+        while detector.running and drone_threads_running and not detection_thread_exit_event.is_set():
+            # Check for stop signal
+            if not drone_threads_running or detection_thread_exit_event.is_set():
+                print("Detection thread received stop signal")
+                break
+            
             # Clear the queue and get only the latest frame
-            latest_frame = None
+            frame_to_process = None
             frames_processed = 0
             
-            # Drain the queue to get the most recent frame
-            while not frame_queue.empty():
-                try:
-                    frame = frame_queue.get_nowait()
-                    frame_queue.task_done()
-                    latest_frame = frame
-                    frames_processed += 1
-                except queue.Empty:
-                    break
+            try:
+                # Drain the queue to get the most recent frame with timeout checks
+                timeout_count = 0
+                while not frame_queue.empty() and timeout_count < 10:  # Limit iterations
+                    try:
+                        frame = frame_queue.get_nowait()
+                        frame_queue.task_done()
+                        frame_to_process = frame
+                        frames_processed += 1
+                    except queue.Empty:
+                        break
+                    
+                    # Check for stop signal frequently
+                    if not drone_threads_running or detection_thread_exit_event.is_set():
+                        print("Detection thread received stop signal during queue processing")
+                        break
+                    
+                    timeout_count += 1
+            except Exception as e:
+                print(f"Error processing queue: {e}")
+            
+            # Check again for thread stop signal
+            if not drone_threads_running or detection_thread_exit_event.is_set():
+                break
             
             # If we processed frames, log how many we skipped
             if frames_processed > 1:
                 print(f"Skipped {frames_processed-1} older frames")
             
             # Process only if we have a frame
-            if latest_frame is not None:
-                # Process frame with object detection
-                detections = detector.detect(latest_frame)
-                
-                # Update latest detections with lock
-                with detection_lock:
-                    global latest_detections
-                    latest_detections = detections
-                
-                # Emit detections through Socket.IO
-                socketio.emit('detections', json.dumps(detections))
+            if frame_to_process is not None:
+                try:
+                    # Check again before processing
+                    if not drone_threads_running or detection_thread_exit_event.is_set():
+                        break
+                    
+                    # Process frame with object detection
+                    detections = detector.detect(frame_to_process)
+                    
+                    # Update latest detections with lock
+                    with detection_lock:
+                        latest_detections = detections
+                    
+                    # Emit detections through Socket.IO
+                    socketio.emit('detections', json.dumps(detections))
+                except Exception as e:
+                    print(f"Error in detection processing: {e}")
             else:
-                # Wait a bit if no frames are available
-                time.sleep(0.05)
+                # Wait a bit if no frames are available, check for stop signal during wait
+                for _ in range(5):  # Wait for about 50ms with checks in between
+                    if not drone_threads_running or detection_thread_exit_event.is_set():
+                        break
+                    time.sleep(0.01)
                 
     except Exception as e:
         print(f"Error in detection thread: {e}")
     finally:
         print("Stopping detection thread")
         detector.running = False
+        
+        # Clear detections
+        with detection_lock:
+            latest_detections = []
+        
+        print("Detection thread has exited")
 
 #--------------------------------------------------------------------------
 # Routes and Endpoints
@@ -722,27 +797,55 @@ def features():
 @app.route('/drone')
 def drone():
     """Serve the drone page and start necessary threads"""
-    global drone_threads_running, rtmp_thread, detect_thread
+    global drone_threads_running, rtmp_thread, detect_thread, detection_thread_exit_event
     
-    # Start drone threads if not already running
-    if not drone_threads_running:
-        # Set the flag to True before starting threads
+    # Stop any existing threads first
+    if drone_threads_running:
+        # Signal threads to stop
+        detection_thread_exit_event.set()
+        with thread_control_lock:
+            drone_threads_running = False
+        
+        # Wait for threads to terminate (with timeout)
+        if rtmp_thread and rtmp_thread.is_alive():
+            rtmp_thread.join(timeout=1.0)
+        
+        if detect_thread and detect_thread.is_alive():
+            detect_thread.join(timeout=1.0)
+        
+        # Clear any resources
+        with frame_lock:
+            latest_frame = None
+        
+        with detection_lock:
+            latest_detections = []
+    
+    # Reset the exit event
+    detection_thread_exit_event.clear()
+    
+    # Set the flag to True before starting new threads
+    with thread_control_lock:
         drone_threads_running = True
-        
-        # RTMP URL - replace with your actual RTMP stream URL
-        rtmp_url = "rtmp://192.168.3.2/live/drone"
-        
-        # Start background threads
-        rtmp_thread = threading.Thread(target=rtmp_reader_thread, args=(rtmp_url,))
-        rtmp_thread.daemon = True
-        
-        detect_thread = threading.Thread(target=detection_thread)
-        detect_thread.daemon = True
-        
-        rtmp_thread.start()
-        detect_thread.start()
-        
-        print("Started drone threads")
+    
+    # RTMP URL - replace with your actual RTMP stream URL
+    rtmp_url = "rtmp://192.168.3.2/live/drone"
+    
+    # Start background threads
+    rtmp_thread = threading.Thread(target=rtmp_reader_thread, args=(rtmp_url,), name="RTMP-Thread")
+    rtmp_thread.daemon = True
+    
+    detect_thread = threading.Thread(target=detection_thread, name="Detection-Thread")
+    detect_thread.daemon = True
+    
+    # Start the threads
+    rtmp_thread.start()
+    detect_thread.start()
+    
+    print("Started drone threads")
+    
+    # Clear GPU memory if available
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     
     return render_template('drone.html')
 
@@ -1115,16 +1218,66 @@ def handle_disconnect():
 
 # Special handler for when a client leaves the drone page
 @socketio.on('leave_drone')
-def handle_leave_drone():
-    global drone_threads_running, rtmp_thread, detect_thread
+def handle_leave_drone(data=None):
+    global drone_threads_running, rtmp_thread, detect_thread, detection_thread_exit_event
     
     print("Client left drone page, stopping threads")
-    drone_threads_running = False
     
-    # Give threads time to shutdown
-    time.sleep(1)
+    # Set the exit event first (fastest way to signal threads)
+    detection_thread_exit_event.set()
     
-    return {'status': 'success', 'message': 'Drone threads stopped'}
+    # Then set the global flag
+    with thread_control_lock:
+        drone_threads_running = False
+    
+    # Clear shared resources
+    with frame_lock:
+        latest_frame = None
+    
+    with detection_lock:
+        latest_detections = []
+    
+    # Clear the queues
+    try:
+        while not frame_queue.empty():
+            frame_queue.get_nowait()
+            frame_queue.task_done()
+    except queue.Empty:
+        pass
+    
+    # Start a background thread to handle thread shutdown
+    def stop_thread_task():
+        try:
+            # Wait for threads to exit (with timeout)
+            if rtmp_thread and rtmp_thread.is_alive():
+                rtmp_thread.join(timeout=3.0)  # 3 second timeout
+                if rtmp_thread.is_alive():
+                    print("Warning: RTMP thread did not exit in time")
+            
+            if detect_thread and detect_thread.is_alive():
+                detect_thread.join(timeout=3.0)  # 3 second timeout
+                if detect_thread.is_alive():
+                    print("Warning: Detection thread did not exit in time")
+            
+            # Send completion notification
+            socketio.emit('threads_stopped', {'status': 'success'})
+            print("Threads stopped successfully")
+            
+            # Clear GPU memory if available
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                
+        except Exception as e:
+            print(f"Error stopping threads: {e}")
+            socketio.emit('threads_stopped', {'status': 'error', 'message': str(e)})
+    
+    # Start the cleanup thread
+    cleanup_thread = threading.Thread(target=stop_thread_task)
+    cleanup_thread.daemon = True
+    cleanup_thread.start()
+    
+    # Return immediately to client
+    return {'status': 'success', 'message': 'Drone threads stopping'}
 
 #--------------------------------------------------------------------------
 # Main Application

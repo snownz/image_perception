@@ -34,6 +34,19 @@ detection_lock = threading.Lock()
 model = None
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+# Thread control flags
+rtmp_thread_running = False
+detection_thread_running = False
+thread_control_lock = threading.Lock()
+
+# Thread references to allow force termination
+current_rtmp_thread = None
+current_detection_thread = None
+thread_references_lock = threading.Lock()
+
+# Set a timeout value for thread shutdown (seconds)
+THREAD_SHUTDOWN_TIMEOUT = 3
+
 @dataclass
 class BackboneConfig:
     in_channels: float = 3
@@ -283,16 +296,96 @@ class ObjectDetector:
         }
     
     def predict(self, image):
-
-        with torch.no_grad():
-
-            torch_image = torch.from_numpy( image ).permute(2, 0, 1).float() / 255.0
-            torch_image = torch_image.to( device )
-            torch_image = resize_image( torch_image, 640 )
-
-            boxes, scores, labels, detectors = model( torch_image, stride_slices = 256, confidence_threshold = 0.7, iou_threshold = 0.3 )
+        """
+        Run model prediction with safeguards for thread interruption.
+        Uses a separate thread with a timeout to prevent the model from hanging.
+        """
+        if detection_thread_exit_event.is_set():
+            print("Skipping prediction due to exit event")
+            return np.array([]), np.array([]), np.array([])
+            
+        # Define result placeholders
+        result_boxes = np.array([])
+        result_scores = np.array([])
+        result_labels = np.array([])
         
-        return boxes.cpu().numpy(), scores.cpu().numpy(), labels.cpu().numpy()
+        # Flag to indicate if prediction completed
+        prediction_complete = threading.Event()
+        prediction_error = [None]  # Use a list to store the error (if any) from the worker thread
+        
+        # Define the actual prediction function to run in a separate thread
+        def run_prediction():
+            try:
+                if detection_thread_exit_event.is_set():
+                    return
+                
+                with torch.no_grad():
+                    # Convert image to tensor
+                    torch_image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+                    torch_image = torch_image.to(device)
+                    torch_image = resize_image(torch_image, 640)
+                    
+                    # Check for exit event again before running model
+                    if detection_thread_exit_event.is_set():
+                        return
+                    
+                    # Run model inference
+                    nonlocal result_boxes, result_scores, result_labels
+                    boxes, scores, labels, _ = model(
+                        torch_image, 
+                        stride_slices=256, 
+                        confidence_threshold=0.7, 
+                        iou_threshold=0.3
+                    )
+                    
+                    # Check for exit event before copying results
+                    if detection_thread_exit_event.is_set():
+                        return
+                    
+                    # Convert results to numpy and store
+                    result_boxes = boxes.cpu().numpy()
+                    result_scores = scores.cpu().numpy()
+                    result_labels = labels.cpu().numpy()
+                    
+            except Exception as e:
+                prediction_error[0] = e
+                print(f"Error in prediction thread: {e}")
+            finally:
+                # Always signal completion, even on error
+                prediction_complete.set()
+                
+                # Clear GPU memory
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+        
+        try:
+            # Start prediction in a separate thread
+            prediction_thread = threading.Thread(target=run_prediction, name="PredictionThread")
+            prediction_thread.daemon = True
+            prediction_thread.start()
+            
+            # Wait for prediction to complete with a timeout
+            prediction_success = prediction_complete.wait(timeout=2.0)  # 2-second timeout
+            
+            # If the prediction didn't complete or there was an error, handle it
+            if not prediction_success:
+                print("Model prediction timed out, forcing stop")
+                return np.array([]), np.array([]), np.array([])
+                
+            if prediction_error[0] is not None:
+                print(f"Model prediction failed: {prediction_error[0]}")
+                return np.array([]), np.array([]), np.array([])
+                
+            # Return the results
+            return result_boxes, result_scores, result_labels
+            
+        except Exception as e:
+            print(f"Error managing prediction: {e}")
+            return np.array([]), np.array([]), np.array([])
+        finally:
+            # Ensure GPU memory is cleared
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
     
     def detect(self, frame: np.ndarray):
 
@@ -332,6 +425,11 @@ class ObjectDetector:
 
 # Thread function for capturing frames from RTMP
 def rtmp_reader_thread(rtmp_url: str):
+    global rtmp_thread_running
+    
+    with thread_control_lock:
+        rtmp_thread_running = True
+    
     reader = RTMPReader(rtmp_url, reconnect_delay=2.0, max_retries=-1)
     reader.running = True
     
@@ -339,7 +437,13 @@ def rtmp_reader_thread(rtmp_url: str):
     
     last_frame_time = time.time()
     try:
-        while reader.running:
+        while True:
+            # Check if thread should stop
+            with thread_control_lock:
+                if not rtmp_thread_running:
+                    print("RTMP thread received stop signal")
+                    break
+            
             # Read frame with automatic reconnection handling
             ret, frame = reader.read()
             
@@ -387,60 +491,128 @@ def rtmp_reader_thread(rtmp_url: str):
     finally:
         print("Stopping RTMP reader thread")
         reader.release()
+        
+        # Ensure thread is marked as stopped
+        with thread_control_lock:
+            rtmp_thread_running = False
+
+# Global variable to force detection thread termination
+detection_thread_exit_event = threading.Event()
 
 # Thread function for object detection
 def detection_thread():
+    global detection_thread_running
+    
+    # Reset exit event
+    detection_thread_exit_event.clear()
+    
+    with thread_control_lock:
+        detection_thread_running = True
+    
     # detector = MockObjectDetector()
     detector = ObjectDetector()
-    detector.running = True
     
     print("Starting object detection thread")
     
     try:
-        while detector.running:
+        while not detection_thread_exit_event.is_set():
+            # Check if thread should stop
+            with thread_control_lock:
+                if not detection_thread_running:
+                    print("Detection thread received stop signal")
+                    break
+            
             # Clear the queue and get only the latest frame
-            latest_frame = None
+            processed_frame = None
             frames_processed = 0
             
             # Drain the queue to get the most recent frame
-            while not frame_queue.empty():
-                try:
-                    frame = frame_queue.get_nowait()
-                    frame_queue.task_done()
-                    latest_frame = frame
-                    frames_processed += 1
-                except queue.Empty:
-                    break
+            try:
+                # Use timeout to allow periodic checks for stop signals
+                while not frame_queue.empty():
+                    try:
+                        frame = frame_queue.get_nowait()
+                        frame_queue.task_done()
+                        processed_frame = frame
+                        frames_processed += 1
+                    except queue.Empty:
+                        break
+                    
+                    # Check for stop signal frequently
+                    if not detection_thread_running or detection_thread_exit_event.is_set():
+                        break
+            except Exception as e:
+                print(f"Error processing queue: {e}")
             
+            # Check again for thread stop signal
+            if not detection_thread_running or detection_thread_exit_event.is_set():
+                print("Detection thread received stop signal during queue processing")
+                break
+                
             # If we processed frames, log how many we skipped
             if frames_processed > 1:
                 print(f"Skipped {frames_processed-1} older frames")
             
             # Process only if we have a frame
-            if latest_frame is not None:
-                # Process frame with object detection
-                detections = detector.detect(latest_frame)
-                
-                # Update latest detections with lock
-                with detection_lock:
-                    global latest_detections
-                    latest_detections = detections
-                
-                # Emit detections through Socket.IO
-                socketio.emit('detections', json.dumps(detections))
+            if processed_frame is not None:
+                try:
+                    # Process frame with object detection
+                    detections = detector.detect(processed_frame)
+                    
+                    # Update latest detections with lock
+                    with detection_lock:
+                        global latest_detections
+                        latest_detections = detections
+                    
+                    # Emit detections through Socket.IO
+                    socketio.emit('detections', json.dumps(detections))
+                except Exception as e:
+                    print(f"Error processing detection: {e}")
             else:
-                # Wait a bit if no frames are available
-                time.sleep(0.05)
-                
+                # Wait a bit if no frames are available, but check for stop signal
+                for _ in range(5):  # 5 x 10ms = 50ms wait, with checks in between
+                    if not detection_thread_running or detection_thread_exit_event.is_set():
+                        break
+                    time.sleep(0.01)
     except Exception as e:
         print(f"Error in detection thread: {e}")
     finally:
         print("Stopping detection thread")
-        detector.running = False
+        
+        # Clear any detections
+        with detection_lock:
+            global latest_detections
+            latest_detections = []
+        
+        # Ensure thread is marked as stopped
+        with thread_control_lock:
+            detection_thread_running = False
+        
+        print("Detection thread has stopped")
 
 @app.route('/')
 def index():
     """Serve the main page"""
+    return render_template('index.html')
+
+@app.route('/drone')
+def drone():
+    """Serve the drone page and ensure threads are running"""
+    # RTMP URL - update this as needed
+    rtmp_url = "rtmp://192.168.3.2/live/drone"
+    
+    try:
+        # Always stop existing threads and start fresh ones
+        print("Initializing fresh threads for new drone page request")
+        
+        # First stop any existing threads
+        stop_all_threads(force=True)
+        
+        # Start new threads
+        start_threads(rtmp_url)
+    except Exception as e:
+        print(f"Error starting threads: {e}")
+    
     return render_template('drone.html')
 
 @app.route('/video_feed')
@@ -494,19 +666,131 @@ def handle_connect():
 def handle_disconnect():
     print('Client disconnected')
 
+@socketio.on('leave_drone')
+def handle_leave_drone(data):
+    """Handle request to stop drone threads"""
+    print('Client requested to stop drone threads')
+    
+    # Use a separate thread for the stopping operation to prevent blocking
+    def stop_thread_task():
+        try:
+            # Stop all threads with force=True to ensure they stop
+            stop_all_threads(force=True)
+            print("Threads successfully stopped")
+            socketio.emit('threads_stopped', {'status': 'success'})
+        except Exception as e:
+            print(f"Error stopping threads: {e}")
+            socketio.emit('threads_stopped', {'status': 'error', 'message': str(e)})
+    
+    # Launch the thread stopping in the background
+    stopping_thread = threading.Thread(target=stop_thread_task)
+    stopping_thread.daemon = True
+    stopping_thread.start()
+    
+    # Immediately return success to the client
+    return {'status': 'success', 'message': 'Drone threads stop request received'}
+
 def start_threads(rtmp_url):
     """Start the worker threads"""
+    # Reset the thread control flags
+    global rtmp_thread_running, detection_thread_running, current_rtmp_thread, current_detection_thread
+    
+    # First, ensure any existing threads are stopped
+    stop_all_threads(force=True)
+    
+    # Clear the exit event to ensure detection thread can run
+    detection_thread_exit_event.clear()
+    
+    # Reset thread control flags
+    with thread_control_lock:
+        rtmp_thread_running = True
+        detection_thread_running = True
+    
     # Start RTMP reader thread
-    rtmp_thread = threading.Thread(target=rtmp_reader_thread, args=(rtmp_url,))
+    rtmp_thread = threading.Thread(target=rtmp_reader_thread, args=(rtmp_url,), name="RTMP-Thread")
     rtmp_thread.daemon = True
-    rtmp_thread.start()
     
     # Start detection thread
-    detect_thread = threading.Thread(target=detection_thread)
+    detect_thread = threading.Thread(target=detection_thread, name="Detection-Thread")
     detect_thread.daemon = True
+    
+    # Store references to the threads
+    with thread_references_lock:
+        current_rtmp_thread = rtmp_thread
+        current_detection_thread = detect_thread
+    
+    # Start the threads
+    rtmp_thread.start()
     detect_thread.start()
     
+    print("Worker threads started")
     return rtmp_thread, detect_thread
+
+def stop_all_threads(force=False):
+    """Stop all running threads, with option to force termination"""
+    global rtmp_thread_running, detection_thread_running, current_rtmp_thread, current_detection_thread
+    
+    print(f"Stopping all threads (force={force})")
+    
+    # Set the exit event immediately
+    detection_thread_exit_event.set()
+    
+    # Set thread control flags to signal threads to stop
+    with thread_control_lock:
+        rtmp_thread_running = False
+        detection_thread_running = False
+    
+    # Get references to current threads
+    with thread_references_lock:
+        rtmp_thread = current_rtmp_thread
+        detect_thread = current_detection_thread
+    
+    if rtmp_thread and rtmp_thread.is_alive():
+        print(f"Waiting for RTMP thread to stop...")
+        rtmp_thread.join(timeout=THREAD_SHUTDOWN_TIMEOUT)
+        if rtmp_thread.is_alive() and force:
+            print("RTMP thread did not stop, leaving as daemon")
+    
+    if detect_thread and detect_thread.is_alive():
+        print(f"Waiting for detection thread to stop...")
+        detect_thread.join(timeout=THREAD_SHUTDOWN_TIMEOUT)
+        if detect_thread.is_alive() and force:
+            print("Detection thread did not stop, leaving as daemon")
+    
+    # Clear thread references
+    with thread_references_lock:
+        current_rtmp_thread = None
+        current_detection_thread = None
+    
+    # Reset resources
+    with frame_lock:
+        global latest_frame
+        latest_frame = None
+    
+    with detection_lock:
+        global latest_detections
+        latest_detections = []
+    
+    # Clear the queues
+    try:
+        while not frame_queue.empty():
+            frame_queue.get_nowait()
+            frame_queue.task_done()
+    except queue.Empty:
+        pass
+    
+    try:
+        while not detection_queue.empty():
+            detection_queue.get_nowait()
+            detection_queue.task_done()
+    except queue.Empty:
+        pass
+    
+    # Clear GPU memory if available
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    
+    print("All threads stopped and resources cleared")
 
 if __name__ == '__main__':
 

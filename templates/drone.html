@@ -454,7 +454,7 @@
     <div class="container">
         <!-- Main Title -->
         <div class="main-title">
-            <h1>Advanced Drone Intelligence Platform</h1>
+            <h1>Robot Intelligence Driving</h1>
             <p>Real-time object detection and analysis with cutting-edge AI technology.</p>
         </div>
         
@@ -510,7 +510,7 @@
         </div>
         
         <!-- Video Section -->
-        <h2 class="section-title">Live Surveillance</h2>
+        <h2 class="section-title">Live</h2>
         <div class="video-section">
             <div class="video-container">
                 <img id="video-feed" class="video-feed" src="" alt="Live Stream">
@@ -521,6 +521,9 @@
                     </button>
                     <button id="toggle-detections" class="control-btn">
                         <i class="fas fa-eye-slash"></i> Hide Detections
+                    </button>
+                    <button id="stop-threads" class="control-btn" style="background-color: #e74c3c;">
+                        <i class="fas fa-stop"></i> Stop Threads
                     </button>
                 </div>
             </div>
@@ -548,17 +551,6 @@
                 <p>Computer Vision technology with advanced AI-powered solutions.</p>
             </div>
             
-            <div class="footer-links">
-                <h3>Quick Links</h3>
-                <ul>
-                    <li><a href="/">Home</a></li>
-                    <li><a href="/drone">Drone</a></li>
-                    <li><a href="/features">Features</a></li>
-                    <li><a href="/detection">Detection</a></li>
-                    <li><a href="/model">Model</a></li>
-                    <li><a href="/about">About Us</a></li>
-                </ul>
-            </div>
             
         </div>
     </footer>
@@ -582,9 +574,29 @@
         
         // Function to handle page unload - stop drone threads
         function stopDroneThreads() {
-            socket.emit('leave_drone', {}, (response) => {
-                console.log('Stopped drone threads:', response);
-            });
+            console.log('Requesting to stop drone threads...');
+            
+            // For page unload events, we need a simpler synchronous approach
+            // that doesn't rely on events or promises
+            
+            // Stop client-side processing immediately
+            if (typeof frameInterval !== 'undefined') {
+                clearInterval(frameInterval);
+            }
+            
+            if (typeof animationFrameId !== 'undefined' && animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            // Make a synchronous request to stop threads
+            try {
+                socket.emit('leave_drone', {});
+                return { status: 'requested' };
+            } catch (e) {
+                console.error('Error requesting to stop threads:', e);
+                return { status: 'error', message: e.toString() };
+            }
         }
         
         // DOM elements
@@ -1047,6 +1059,77 @@
         
         // Start video when page loads
         startVideoFeed();
+        
+        // Listen for threads_stopped event
+        socket.on('threads_stopped', function(data) {
+            console.log('Received threads_stopped event:', data);
+            const button = document.getElementById('stop-threads');
+            
+            if (data.status === 'success') {
+                button.innerHTML = '<i class="fas fa-check"></i> Threads Stopped';
+                button.style.backgroundColor = '#27ae60';
+            } else {
+                button.innerHTML = '<i class="fas fa-times"></i> Failed to Stop';
+                button.style.backgroundColor = '#e74c3c';
+            }
+            
+            // Update UI to show no detections
+            detectionCountDisplay.textContent = '0';
+            detectionItems.innerHTML = '<div class="detection-item">No objects detected</div>';
+            
+            // Clear the detection overlay canvas
+            if (context) {
+                context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            }
+            
+            // Stop the frame fetching interval
+            clearInterval(frameInterval);
+            
+            // Stop the animation frame if running
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        });
+        
+        // Handle stop threads button
+        document.getElementById('stop-threads').addEventListener('click', function() {
+            const button = this;
+            // Update button to show it's processing
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Stopping...';
+            button.disabled = true;
+            
+            // Stop local animations and intervals
+            clearInterval(frameInterval);
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            // Send stop signal to server - server will respond with threads_stopped event
+            socket.emit('leave_drone', {}, function(initialResponse) {
+                console.log('Initial server response:', initialResponse);
+                // Full completion will be indicated by the threads_stopped event
+                
+                // Set a timeout failsafe in case server doesn't respond with the event
+                setTimeout(() => {
+                    const button = document.getElementById('stop-threads');
+                    if (button && button.innerHTML.includes('Stopping')) {
+                        button.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Timed Out';
+                        button.style.backgroundColor = '#f39c12';
+                        
+                        // Still clear UI elements
+                        detectionCountDisplay.textContent = '0';
+                        detectionItems.innerHTML = '<div class="detection-item">No objects detected</div>';
+                        
+                        // Clear the detection overlay canvas
+                        if (context) {
+                            context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                        }
+                    }
+                }, 5000);  // 5 second timeout
+            });
+        });
         
         // Listen for page unload/navigation events to stop the drone threads
         window.addEventListener('beforeunload', stopDroneThreads);
