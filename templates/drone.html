@@ -612,9 +612,12 @@
         
         // Adjust canvas size to match video
         function resizeOverlay() {
-            if (videoElement.naturalWidth > 0) {
-                overlayCanvas.width = videoElement.clientWidth;
-                overlayCanvas.height = videoElement.clientHeight;
+            overlayCanvas.width = videoElement.clientWidth;
+            overlayCanvas.height = videoElement.clientHeight;
+            
+            // Start animation if we have detections
+            if (showDetections && !animationFrameId) {
+                animationFrameId = requestAnimationFrame(drawDetections);
             }
         }
         
@@ -812,15 +815,7 @@
             // Update positions for animation
             updatePositions();
             
-            // Prepare for drawing
-            const videoWidth = videoElement.clientWidth;
-            const videoHeight = videoElement.clientHeight;
-            const originalWidth = videoElement.naturalWidth || 854;
-            const originalHeight = videoElement.naturalHeight || 480;
-            
-            const scaleX = videoWidth / originalWidth;
-            const scaleY = videoHeight / originalHeight;
-            
+            // Clear the canvas
             context.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
             
             // Draw all active tracking objects
@@ -832,19 +827,34 @@
                 // Full opacity since we don't fade out tracks anymore
                 const opacity = 1.0;
                 
-                // Convert center coordinates to corner coordinates
+                // Get coordinates - API now sends pixel coordinates in center format
                 const [xc, yc, w, h] = track.currentBbox;
                 const x1 = xc - w/2;
                 const y1 = yc - h/2;
-                const scaledX1 = x1 * scaleX;
-                const scaledY1 = y1 * scaleY;
-                const scaledWidth = w * scaleX;
-                const scaledHeight = h * scaleY;
+                
+                // Get scaling factors for the display
+                const displayWidth = overlayCanvas.width;
+                const displayHeight = overlayCanvas.height;
+                const imageWidth = videoElement.naturalWidth;
+                const imageHeight = videoElement.naturalHeight;
+                
+                // Only proceed if we have valid dimensions
+                if (!imageWidth || !imageHeight) return;
+                
+                // Calculate scale factors
+                const scaleX = displayWidth / imageWidth;
+                const scaleY = displayHeight / imageHeight;
+                
+                // Apply scaling to the coordinates
+                const scaledX = x1 * scaleX;
+                const scaledY = y1 * scaleY;
+                const scaledW = w * scaleX;
+                const scaledH = h * scaleY;
                 
                 // Draw bounding box with fade out for older tracks
                 context.strokeStyle = track.color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
                 context.lineWidth = 2;
-                context.strokeRect(scaledX1, scaledY1, scaledWidth, scaledHeight);
+                context.strokeRect(scaledX, scaledY, scaledW, scaledH);
                 
                 // Draw label
                 const label = `${track.class_name}: ${track.confidence.toFixed(2)}`;
@@ -853,11 +863,11 @@
                 
                 // Draw label background
                 context.fillStyle = track.color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
-                context.fillRect(scaledX1, scaledY1 - 20, textWidth + 8, 20);
+                context.fillRect(scaledX, scaledY - 20, textWidth + 8, 20);
                 
                 // Draw label text
                 context.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-                context.fillText(label, scaledX1 + 4, scaledY1 - 5);
+                context.fillText(label, scaledX + 4, scaledY - 5);
             }
             
             // Continue animation
@@ -922,7 +932,6 @@
                     
                     videoElement.src = 'data:image/jpeg;base64,' + data.image;
                     updateStats();
-                    resizeOverlay();
                     
                     // Ensure animation is running if we have detections
                     if (showDetections && !animationFrameId) {
@@ -1029,8 +1038,9 @@
         // Listen for window resize to adjust overlay
         window.addEventListener('resize', resizeOverlay);
         
-        // Initialize when video is loaded
+        // Initialize when video is loaded or has new data
         videoElement.addEventListener('load', resizeOverlay);
+        videoElement.addEventListener('loadeddata', resizeOverlay);
         
         // Update UI elements initially
         updatePlayPauseButton();

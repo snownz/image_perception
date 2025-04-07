@@ -673,7 +673,7 @@ class ObjectDetectionModel(Module):
 
             return loss_dict, output_dict
 
-    def predict(self, image, stride_slices=512, confidence_threshold=0.5, iou_threshold=0.5, id_bg=-1):
+    def forward(self, image, stride_slices=512, confidence_threshold=0.5, iou_threshold=0.5, id_bg=-1):
 
         with torch.amp.autocast( enabled = True, device_type = "cuda" ):
 

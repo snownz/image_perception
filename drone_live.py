@@ -23,8 +23,8 @@ app.config['SECRET_KEY'] = 'livestream-secret!'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Shared queues for communication between threads
-frame_queue = queue.Queue(maxsize=10)  # Limit queue size to prevent memory issues
-detection_queue = queue.Queue(maxsize=10)
+frame_queue = queue.Queue(maxsize=5)  # Smaller queue size to ensure fresher frames
+detection_queue = queue.Queue(maxsize=5)
 
 # Shared storage for latest data
 latest_frame = None
@@ -82,6 +82,9 @@ def load_model():
     model = ObjectDetectionModel(cfg, device)
     model.to(device)
     model.eval()
+    torch.compile( model )
+    a = 10
+
 load_model()
 
 class RTMPReader:
@@ -287,7 +290,7 @@ class ObjectDetector:
             torch_image = torch_image.to( device )
             torch_image = resize_image( torch_image, 640 )
 
-            boxes, scores, labels, detectors = model.predict( torch_image, stride_slices = 32, confidence_threshold = 0.9, iou_threshold = 0.3 )
+            boxes, scores, labels, detectors = model( torch_image, stride_slices = 256, confidence_threshold = 0.7, iou_threshold = 0.3 )
         
         return boxes.cpu().numpy(), scores.cpu().numpy(), labels.cpu().numpy()
     
@@ -305,14 +308,21 @@ class ObjectDetector:
         for box, score, label in zip(boxes, scores, labels):
 
             x_center, y_center, width, height = box
+            # Convert normalized coordinates to actual pixel coordinates
             x_min = int( ( x_center - width / 2 ) * im_width )
             y_min = int( ( y_center - height / 2 ) * im_height )
             x_max = int( ( x_center + width / 2 ) * im_width )
             y_max = int( ( y_center + height / 2 ) * im_height )
             
-            # Append detection
+            # Calculate for center format with actual pixel values
+            pixel_x_center = (x_min + x_max) / 2
+            pixel_y_center = (y_min + y_max) / 2
+            pixel_width = x_max - x_min
+            pixel_height = y_max - y_min
+            
+            # Append detection with center format (matching what the frontend expects)
             detections.append({
-                "bbox": [x_min, y_min, x_max, y_max],
+                "bbox": [pixel_x_center, pixel_y_center, pixel_width, pixel_height],
                 "class_id": int(label),
                 "class_name": self.int_to_label[int(label)],
                 "confidence": float(score)
@@ -342,10 +352,7 @@ def rtmp_reader_thread(rtmp_url: str):
             current_time = time.time()
             fps = 1.0 / (current_time - last_frame_time)
             last_frame_time = current_time
-            
-            # Resize for web streaming (optional, adjust as needed)
-            frame = cv2.resize(frame, (854, 480))
-            
+                        
             # Add FPS text
             cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -355,12 +362,22 @@ def rtmp_reader_thread(rtmp_url: str):
                 global latest_frame
                 latest_frame = frame.copy()
             
-            # Try to add to queue without blocking if full
+            # Clear queue if it's getting full to avoid backlog
+            if frame_queue.qsize() > 3:  # If more than 3 frames are waiting
+                try:
+                    # Try to drain the queue
+                    while not frame_queue.empty():
+                        frame_queue.get_nowait()
+                        frame_queue.task_done()
+                except queue.Empty:
+                    pass
+            
+            # Add the new frame to the queue
             try:
-                if not frame_queue.full():
-                    frame_queue.put_nowait(frame.copy())
+                frame_queue.put_nowait(frame.copy())
             except queue.Full:
-                pass  # Skip frame if queue is full
+                # If still full after clearing, skip this frame
+                pass
             
             # Throttle capture rate to reduce CPU usage
             time.sleep(0.01)  # Adjust for desired capture rate
@@ -381,36 +398,39 @@ def detection_thread():
     
     try:
         while detector.running:
-            # Get frame from queue, waiting up to 1 second
-            try:
-                frame = frame_queue.get(timeout=1.0)
-                
+            # Clear the queue and get only the latest frame
+            latest_frame = None
+            frames_processed = 0
+            
+            # Drain the queue to get the most recent frame
+            while not frame_queue.empty():
+                try:
+                    frame = frame_queue.get_nowait()
+                    frame_queue.task_done()
+                    latest_frame = frame
+                    frames_processed += 1
+                except queue.Empty:
+                    break
+            
+            # If we processed frames, log how many we skipped
+            if frames_processed > 1:
+                print(f"Skipped {frames_processed-1} older frames")
+            
+            # Process only if we have a frame
+            if latest_frame is not None:
                 # Process frame with object detection
-                detections = detector.detect(frame)
+                detections = detector.detect(latest_frame)
                 
                 # Update latest detections with lock
                 with detection_lock:
                     global latest_detections
                     latest_detections = detections
                 
-                # Notify queue task is done
-                frame_queue.task_done()
-                
-                # Try to add to detection queue without blocking
-                try:
-                    if not detection_queue.full():
-                        detection_queue.put_nowait(detections)
-                except queue.Full:
-                    pass  # Skip if queue is full
-                
                 # Emit detections through Socket.IO
                 socketio.emit('detections', json.dumps(detections))
-                
-            except queue.Empty:
-                pass  # No frame available, continue waiting
-                
-            # Throttle detection rate slightly
-            time.sleep(0.01)
+            else:
+                # Wait a bit if no frames are available
+                time.sleep(0.05)
                 
     except Exception as e:
         print(f"Error in detection thread: {e}")
