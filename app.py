@@ -14,11 +14,10 @@ import os
 import tempfile
 import traceback
 import math
-from typing import List, Dict, Tuple, Optional
-from flask import Flask, render_template, Response, jsonify, request, url_for, redirect
+from typing import Tuple, Optional
+from flask import Flask, render_template, Response, jsonify, request
 from flask_socketio import SocketIO
 from werkzeug.utils import secure_filename
-import copy
 from dataclasses import dataclass, field
 from src.models import ObjectDetectionModel
 
